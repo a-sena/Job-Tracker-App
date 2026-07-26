@@ -1,0 +1,33 @@
+## .NET build output
+**/bin/
+**/obj/
+artifacts/
+
+## IDE and user settings
+.vs/
+.vscode/
+*.user
+*.suo
+
+## Local configuration and secrets
+appsettings.Local.json
+.env
+
+## Test output
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+## Python
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+*.py[cod]
+
+## Node
+**/node_modules/
+**/.vite/
+**/dist/
