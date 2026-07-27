@@ -159,9 +159,9 @@ function FieldLabel({
 }
 
 const inputClassName =
-  "h-11 rounded-lg border border-slate-300 px-3 font-normal text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+  "h-11 rounded-md border-2 border-[#9ca1ad] bg-white px-3 font-normal text-[#172033] outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dbe3ff]";
 const textareaClassName =
-  "resize-y rounded-lg border border-slate-300 px-3 py-2.5 font-normal leading-6 text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+  "resize-y rounded-md border-2 border-[#9ca1ad] bg-white px-3 py-2.5 font-normal leading-6 text-[#172033] outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dbe3ff]";
 
 export default function MasterCvEditor({
   userId,
@@ -338,16 +338,16 @@ export default function MasterCvEditor({
   }
 
   return (
-    <section className="mt-6 rounded-2xl border border-blue-200 bg-white shadow-sm">
-      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:p-7">
+    <section className="mt-6 overflow-hidden rounded-lg border-2 border-[#172033] bg-white shadow-[5px_5px_0_#172033]">
+      <div className="flex flex-col justify-between gap-4 border-b-2 border-[#172033] bg-[#3157d5] p-5 text-white sm:flex-row sm:items-start sm:p-7">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ffcc4d]">
             Factual source
           </p>
-          <h2 className="mt-1 text-xl font-bold text-slate-950">
+          <h2 className="mt-1 text-2xl font-black text-white">
             Master CV workspace
           </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#e3e9ff]">
             Only information saved here may appear in tailored CVs. The AI can
             rephrase and prioritize these facts, but cannot add employers,
             experience, or tools you did not provide.
@@ -356,7 +356,7 @@ export default function MasterCvEditor({
         <div className="flex shrink-0 gap-2">
           <label
             className={[
-              "rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-700",
+              "rounded-md border-2 border-[#172033] bg-[#ff7058] px-3 py-2 text-sm font-black text-[#172033] shadow-[3px_3px_0_#172033] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#172033]",
               isImportingPdf
                 ? "cursor-wait opacity-60"
                 : "cursor-pointer",
@@ -375,7 +375,7 @@ export default function MasterCvEditor({
               }}
             />
           </label>
-          <label className="cursor-pointer rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
+          <label className="cursor-pointer rounded-md border-2 border-[#172033] bg-white px-3 py-2 text-sm font-bold text-[#172033] transition hover:bg-[#ffcc4d]">
             Import JSON
             <input
               type="file"
@@ -391,7 +391,7 @@ export default function MasterCvEditor({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100"
+            className="rounded-md px-3 py-2 text-sm font-bold text-white transition hover:bg-white/15"
           >
             Close
           </button>
@@ -418,6 +418,15 @@ export default function MasterCvEditor({
             </ul>
           </div>
         ) : null}
+
+        <div className="flex items-center gap-3 border-b-2 border-[#172033] pb-3">
+          <span className="bg-[#ffcc4d] px-2 py-1 text-xs font-black text-[#172033]">
+            01
+          </span>
+          <h3 className="text-lg font-black uppercase tracking-[0.08em] text-[#172033]">
+            Profile
+          </h3>
+        </div>
 
         <div className="grid gap-5 md:grid-cols-2">
           <FieldLabel label="CV name">
@@ -517,7 +526,10 @@ export default function MasterCvEditor({
 
         <div>
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-950">Work experience</h3>
+            <h3 className="text-lg font-black uppercase tracking-[0.06em] text-[#172033]">
+              <span className="mr-2 text-[#3157d5]">02</span>
+              Work experience
+            </h3>
             <button
               type="button"
               onClick={() =>
@@ -526,7 +538,7 @@ export default function MasterCvEditor({
                   { ...EMPTY_EXPERIENCE, bulletPoints: [""] },
                 ])
               }
-              className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+              className="rounded-md border-2 border-[#172033] bg-white px-3 py-2 text-sm font-bold text-[#172033] shadow-[2px_2px_0_#172033] transition hover:bg-[#e8edff]"
             >
               Add experience
             </button>
@@ -542,7 +554,7 @@ export default function MasterCvEditor({
             {content.workExperience.map((experience, index) => (
               <div
                 key={index}
-                className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4"
+                className="grid gap-4 rounded-md border-2 border-l-[6px] border-[#172033] border-l-[#3157d5] bg-[#f7f7f4] p-4"
               >
                 <div className="flex justify-between">
                   <p className="text-sm font-bold text-slate-700">
@@ -627,7 +639,10 @@ export default function MasterCvEditor({
 
         <div>
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-950">Education</h3>
+            <h3 className="text-lg font-black uppercase tracking-[0.06em] text-[#172033]">
+              <span className="mr-2 text-[#d84d3d]">03</span>
+              Education
+            </h3>
             <button
               type="button"
               onClick={() =>
@@ -636,7 +651,7 @@ export default function MasterCvEditor({
                   { ...EMPTY_EDUCATION, details: [] },
                 ])
               }
-              className="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+              className="rounded-md border-2 border-[#172033] bg-white px-3 py-2 text-sm font-bold text-[#172033] shadow-[2px_2px_0_#172033] transition hover:bg-[#fff4d1]"
             >
               Add education
             </button>
@@ -645,7 +660,7 @@ export default function MasterCvEditor({
             {content.education.map((education, index) => (
               <div
                 key={index}
-                className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4"
+                className="grid gap-4 rounded-md border-2 border-l-[6px] border-[#172033] border-l-[#ff7058] bg-[#f7f7f4] p-4"
               >
                 <div className="flex justify-between">
                   <p className="text-sm font-bold text-slate-700">
@@ -747,7 +762,7 @@ export default function MasterCvEditor({
           <button
             type="submit"
             disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-6 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+            className="inline-flex h-11 items-center justify-center rounded-md border-2 border-[#172033] bg-[#3157d5] px-6 text-sm font-black text-white shadow-[3px_3px_0_#172033] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#172033] disabled:cursor-wait disabled:opacity-60"
           >
             {isSaving ? "Saving…" : "Save Master CV"}
           </button>

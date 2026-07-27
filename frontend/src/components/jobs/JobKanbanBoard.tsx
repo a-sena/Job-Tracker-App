@@ -57,10 +57,13 @@ type JobsByStatus = Record<JobStatus, JobApplication[]>;
 
 interface ColumnStyle {
   title: string;
+  columnClassName: string;
   headerClassName: string;
-  dotClassName: string;
   countClassName: string;
   dropRingClassName: string;
+  cardAccentClassName: string;
+  avatarClassName: string;
+  emptyClassName: string;
 }
 
 interface ToastMessage {
@@ -71,31 +74,43 @@ interface ToastMessage {
 const COLUMN_STYLES: Record<JobStatus, ColumnStyle> = {
   Applied: {
     title: "Applied",
-    headerClassName: "border-blue-200 bg-blue-50 text-blue-900",
-    dotClassName: "bg-blue-500",
-    countClassName: "bg-blue-100 text-blue-700",
-    dropRingClassName: "border-blue-300 bg-blue-50/70 ring-blue-200",
+    columnClassName: "border-[#172033] bg-[#ebe9e2]",
+    headerClassName: "border-[#172033] bg-[#3157d5] text-white",
+    countClassName: "border border-[#172033] bg-[#ffcc4d] text-[#172033]",
+    dropRingClassName: "border-[#3157d5] bg-[#e8edff] ring-[#9fb1f2]",
+    cardAccentClassName: "border-l-[#3157d5]",
+    avatarClassName: "bg-[#3157d5] text-white",
+    emptyClassName: "border-[#172033] bg-white/60 text-[#626979]",
   },
   Interviewing: {
     title: "Interviewing",
-    headerClassName: "border-yellow-200 bg-yellow-50 text-yellow-900",
-    dotClassName: "bg-yellow-500",
-    countClassName: "bg-yellow-100 text-yellow-800",
-    dropRingClassName: "border-yellow-300 bg-yellow-50/70 ring-yellow-200",
+    columnClassName: "border-[#172033] bg-[#ebe9e2]",
+    headerClassName: "border-[#172033] bg-[#ffcc4d] text-[#172033]",
+    countClassName: "border border-[#172033] bg-white text-[#172033]",
+    dropRingClassName: "border-[#d39a15] bg-[#fff7d9] ring-[#ead189]",
+    cardAccentClassName: "border-l-[#d39a15]",
+    avatarClassName: "bg-[#ffcc4d] text-[#172033]",
+    emptyClassName: "border-[#172033] bg-white/60 text-[#626979]",
   },
   Offer: {
     title: "Offer",
-    headerClassName: "border-green-200 bg-green-50 text-green-900",
-    dotClassName: "bg-green-500",
-    countClassName: "bg-green-100 text-green-700",
-    dropRingClassName: "border-green-300 bg-green-50/70 ring-green-200",
+    columnClassName: "border-[#172033] bg-[#ebe9e2]",
+    headerClassName: "border-[#172033] bg-[#258b57] text-white",
+    countClassName: "border border-[#172033] bg-white text-[#172033]",
+    dropRingClassName: "border-[#258b57] bg-[#e4f3ea] ring-[#9dccb2]",
+    cardAccentClassName: "border-l-[#258b57]",
+    avatarClassName: "bg-[#258b57] text-white",
+    emptyClassName: "border-[#172033] bg-white/60 text-[#626979]",
   },
   Rejected: {
     title: "Rejected",
-    headerClassName: "border-red-200 bg-red-50 text-red-900",
-    dotClassName: "bg-red-500",
-    countClassName: "bg-red-100 text-red-700",
-    dropRingClassName: "border-red-300 bg-red-50/70 ring-red-200",
+    columnClassName: "border-[#172033] bg-[#ebe9e2]",
+    headerClassName: "border-[#172033] bg-[#d84d3d] text-white",
+    countClassName: "border border-[#172033] bg-white text-[#172033]",
+    dropRingClassName: "border-[#d84d3d] bg-[#fbe8e5] ring-[#e7aaa2]",
+    cardAccentClassName: "border-l-[#d84d3d]",
+    avatarClassName: "bg-[#d84d3d] text-white",
+    emptyClassName: "border-[#172033] bg-white/60 text-[#626979]",
   },
 };
 
@@ -532,21 +547,17 @@ export function JobKanbanBoard({
             return (
               <div
                 key={status}
-                className="flex min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50/80 shadow-sm"
+                className={`flex min-h-[28rem] min-w-0 flex-col overflow-hidden rounded-lg border-2 shadow-[4px_4px_0_#172033] ${column.columnClassName}`}
               >
                 <header
-                  className={`flex items-center justify-between border-b px-4 py-3 ${column.headerClassName}`}
+                  className={`flex items-center justify-between border-b px-4 py-3.5 ${column.headerClassName}`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      aria-hidden="true"
-                      className={`h-2.5 w-2.5 rounded-full ${column.dotClassName}`}
-                    />
-                    <h2 className="text-sm font-semibold">{column.title}</h2>
-                  </div>
+                  <h2 className="text-sm font-black uppercase tracking-[0.08em]">
+                    {column.title}
+                  </h2>
                   <span
                     aria-label={`${jobs.length} jobs`}
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${column.countClassName}`}
+                    className={`rounded-md px-2 py-0.5 text-xs font-medium ${column.countClassName}`}
                   >
                     {jobs.length}
                   </span>
@@ -585,9 +596,9 @@ export function JobKanbanBoard({
                                 {...dragProvided.draggableProps}
                                 {...dragProvided.dragHandleProps}
                                 className={[
-                                  "group rounded-lg border border-slate-200 bg-white p-4 shadow-sm outline-none transition",
-                                  "hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md",
-                                  "focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+                                  `group rounded-lg border-2 border-l-4 border-[#172033] bg-white p-4 shadow-[3px_3px_0_#172033] outline-none transition ${column.cardAccentClassName}`,
+                                  "hover:-translate-y-0.5 hover:shadow-[4px_4px_0_#172033]",
+                                  "focus-visible:ring-2 focus-visible:ring-[#3157d5] focus-visible:ring-offset-2",
                                   dragSnapshot.isDragging
                                     ? "rotate-[1deg] border-blue-300 shadow-xl ring-2 ring-blue-200"
                                     : "",
@@ -598,16 +609,24 @@ export function JobKanbanBoard({
                                 aria-label={`${job.title} at ${job.company}`}
                               >
                                 <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <h3 className="truncate text-sm font-semibold text-slate-950">
-                                      {job.title}
-                                    </h3>
-                                    <p className="mt-0.5 truncate text-sm text-slate-600">
-                                      {job.company}
-                                    </p>
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <span
+                                      aria-hidden="true"
+                                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm font-semibold ${column.avatarClassName}`}
+                                    >
+                                      {job.company.charAt(0).toUpperCase()}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <h3 className="truncate text-[15px] font-black text-[#172033]">
+                                        {job.title}
+                                      </h3>
+                                      <p className="mt-0.5 truncate text-sm text-slate-600">
+                                        {job.company}
+                                      </p>
+                                    </div>
                                   </div>
                                   <span
-                                    className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ring-1 ring-inset ${atsBadge.className}`}
+                                    className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ring-inset ${atsBadge.className}`}
                                   >
                                     {atsBadge.label}
                                   </span>
@@ -626,7 +645,7 @@ export function JobKanbanBoard({
                                   </p>
                                 ) : null}
 
-                                <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                                <div className="mt-4 flex items-center justify-between gap-3 border-t-2 border-[#e5e3dc] pt-3">
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                                       Applied
@@ -645,7 +664,7 @@ export function JobKanbanBoard({
                                         href={pdfUrl}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                                        className="inline-flex items-center gap-1.5 rounded-md border-2 border-[#172033] bg-white px-2.5 py-2 text-xs font-bold text-[#172033] transition hover:bg-[#eef1ff] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3157d5] focus-visible:ring-offset-2"
                                       >
                                         <PdfIcon />
                                         View PDF
@@ -659,7 +678,7 @@ export function JobKanbanBoard({
                                           }
                                           title="Generate a new optimized version"
                                           aria-label={`Re-tailor CV for ${job.title}`}
-                                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:border-blue-400 hover:text-blue-700 disabled:cursor-wait disabled:opacity-60"
+                                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border-2 border-[#172033] bg-white text-[#172033] transition hover:bg-[#ffcc4d] disabled:cursor-wait disabled:opacity-60"
                                         >
                                           <RefreshIcon />
                                         </button>
@@ -670,7 +689,7 @@ export function JobKanbanBoard({
                                       type="button"
                                       disabled={isTailoring}
                                       onClick={() => void generateTailoredCv(job)}
-                                      className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                                      className="inline-flex items-center gap-1.5 rounded-md border-2 border-[#172033] bg-[#3157d5] px-2.5 py-2 text-xs font-bold text-white transition hover:bg-[#2448bb] disabled:cursor-wait disabled:opacity-60"
                                     >
                                       <PdfIcon />
                                       {isTailoring ? "Tailoring…" : "Tailor CV"}
@@ -700,7 +719,7 @@ export function JobKanbanBoard({
                       {provided.placeholder}
 
                       {jobs.length === 0 && !snapshot.isDraggingOver ? (
-                        <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white/60 px-4 text-center text-xs font-medium text-slate-400">
+                        <div className={`flex min-h-28 items-center justify-center rounded-md border-2 border-dashed px-4 text-center text-xs font-bold ${column.emptyClassName}`}>
                           Drag a job application here
                         </div>
                       ) : null}

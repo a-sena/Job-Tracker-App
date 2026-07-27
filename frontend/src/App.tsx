@@ -147,25 +147,6 @@ function LinkIcon(): JSX.Element {
   );
 }
 
-function SparklesIcon(): JSX.Element {
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M9.813 15.904 9 18l-.813-2.096a4.5 4.5 0 0 0-2.591-2.591L3.5 12.5l2.096-.813a4.5 4.5 0 0 0 2.591-2.591L9 7l.813 2.096a4.5 4.5 0 0 0 2.591 2.591l2.096.813-2.096.813a4.5 4.5 0 0 0-2.591 2.591ZM18.259 8.715 18 9.5l-.259-.785a3.375 3.375 0 0 0-2.456-2.456L14.5 6l.785-.259a3.375 3.375 0 0 0 2.456-2.456L18 2.5l.259.785a3.375 3.375 0 0 0 2.456 2.456L21.5 6l-.785.259a3.375 3.375 0 0 0-2.456 2.456Z"
-      />
-    </svg>
-  );
-}
-
 export default function App(): JSX.Element {
   const [userId] = useState(getLocalUserId);
   const [jobs, setJobs] = useState<ApiJobApplication[]>([]);
@@ -397,26 +378,25 @@ export default function App(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <header className="border-b border-slate-200 bg-white">
+    <div className="min-h-screen bg-[#f3f0e8] text-[#172033]">
+      <header className="sticky top-0 z-40 border-b-2 border-[#172033] bg-white">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-lg font-bold text-white shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-[#172033] bg-[#3157d5] text-base font-black text-white shadow-[3px_3px_0_#ffcc4d]">
               J
             </div>
             <div>
-              <p className="text-lg font-bold tracking-tight text-slate-950">
+              <p className="text-lg font-black tracking-tight text-[#172033]">
                 JobFlow
               </p>
-              <p className="text-xs text-slate-500">Application workspace</p>
+              <p className="text-xs font-medium text-[#626979]">Application workspace</p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setShowMasterCvEditor((visible) => !visible)}
-            className="hidden items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 sm:flex"
+            className="hidden items-center gap-2 rounded-md border-2 border-[#172033] bg-[#ffcc4d] px-4 py-2 text-xs font-bold text-[#172033] shadow-[3px_3px_0_#172033] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#172033] sm:flex"
           >
-            <SparklesIcon />
             {isMasterCvLoading
               ? "Checking Master CV…"
               : masterCv
@@ -427,19 +407,19 @@ export default function App(): JSX.Element {
       </header>
 
       <main className="mx-auto max-w-[1600px] px-4 py-8 sm:px-6 lg:px-8">
-        <section className="overflow-hidden rounded-2xl bg-slate-950 shadow-xl">
-          <div className="grid lg:grid-cols-[1fr_0.85fr]">
-            <div className="px-6 py-8 sm:px-10 sm:py-10">
+        <section className="overflow-hidden rounded-xl border-2 border-[#172033] bg-white shadow-[8px_8px_0_#172033]">
+          <div className="grid lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="bg-[#3157d5] px-6 py-9 sm:px-10 sm:py-12">
               <div className="mb-6 max-w-2xl">
-                <span className="inline-flex rounded-full bg-blue-500/15 px-3 py-1 text-xs font-semibold text-blue-300 ring-1 ring-inset ring-blue-400/25">
+                <span className="inline-block border-2 border-[#172033] bg-[#ffcc4d] px-2.5 py-1 text-xs font-black uppercase tracking-[0.14em] text-[#172033]">
                   Add an application
                 </span>
-                <h1 className="mt-4 text-balance text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                  Paste a vacancy. Build your job search pipeline.
+                <h1 className="mt-5 max-w-2xl text-4xl font-black leading-[1.02] tracking-[-0.04em] text-white sm:text-6xl">
+                  Make every application count.
                 </h1>
-                <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
-                  We extract the vacancy details for review before anything is
-                  saved. You stay in control of every application.
+                <p className="mt-4 max-w-xl text-sm leading-6 text-[#e3e9ff] sm:text-base">
+                  Paste the vacancy link below. You can review the title,
+                  company, and description before saving it.
                 </p>
               </div>
 
@@ -448,7 +428,7 @@ export default function App(): JSX.Element {
                   Job posting URL
                 </label>
                 <div className="relative flex-1">
-                  <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400">
+                  <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-[#4d5566]">
                     <LinkIcon />
                   </span>
                   <input
@@ -458,21 +438,20 @@ export default function App(): JSX.Element {
                     value={jobUrl}
                     onChange={(event) => setJobUrl(event.target.value)}
                     placeholder="https://company.no/jobs/software-engineer"
-                    className="h-12 w-full rounded-xl border border-white/15 bg-white/10 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/[0.13] focus:ring-2 focus:ring-blue-400/20"
+                    className="h-12 w-full rounded-md border-2 border-[#172033] bg-white pl-12 pr-4 text-sm text-[#172033] outline-none transition placeholder:text-[#9298a5] focus:ring-4 focus:ring-[#ffcc4d]/60"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={isExtracting}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white transition hover:bg-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex h-12 items-center justify-center rounded-md border-2 border-[#172033] bg-[#ff7058] px-6 text-sm font-black text-[#172033] shadow-[3px_3px_0_#172033] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#172033] focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#3157d5] disabled:cursor-wait disabled:opacity-60"
                 >
-                  <SparklesIcon />
                   {isExtracting ? "Extracting…" : "Extract vacancy"}
                 </button>
               </form>
 
               {extractionError ? (
-                <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border-2 border-[#172033] bg-[#ffe4df] px-4 py-3 text-sm font-medium text-[#7f3026]">
                   <p className="flex-1">{extractionError}</p>
                   {!review && jobUrl.trim() ? (
                     <button
@@ -481,7 +460,7 @@ export default function App(): JSX.Element {
                         setReview(createManualReview(jobUrl.trim()));
                         setExtractionError(null);
                       }}
-                      className="font-semibold text-white underline underline-offset-4"
+                      className="font-semibold underline underline-offset-4"
                     >
                       Enter manually
                     </button>
@@ -490,23 +469,23 @@ export default function App(): JSX.Element {
               ) : null}
             </div>
 
-            <div className="border-t border-white/10 bg-white/[0.04] px-6 py-8 sm:px-10 lg:border-l lg:border-t-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            <div className="border-t-2 border-[#172033] bg-[#ffcc4d] px-6 py-8 text-[#172033] sm:px-10 lg:border-l-2 lg:border-t-0">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#172033]">
                 Your pipeline
               </p>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-2xl font-bold text-white">{jobs.length}</p>
-                  <p className="mt-1 text-xs text-slate-400">Tracked roles</p>
+              <div className="mt-6 grid grid-cols-2 border-y-2 border-[#172033]">
+                <div className="py-5 pr-5">
+                  <p className="text-5xl font-black tracking-tight text-[#172033]">{jobs.length}</p>
+                  <p className="mt-1 text-xs font-bold text-[#505667]">Tracked roles</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-2xl font-bold text-green-300">
+                <div className="border-l-2 border-[#172033] py-5 pl-5">
+                  <p className="text-5xl font-black tracking-tight text-[#c84736]">
                     {jobs.filter((job) => job.status === "Interviewing").length}
                   </p>
-                  <p className="mt-1 text-xs text-slate-400">Interviews</p>
+                  <p className="mt-1 text-xs font-bold text-[#505667]">Interviews</p>
                 </div>
               </div>
-              <p className="mt-5 text-sm leading-6 text-slate-400">
+              <p className="mt-5 text-sm font-medium leading-6 text-[#404658]">
                 ATS scoring and tailored PDF actions become available after a
                 Master CV is connected in the next workflow.
               </p>
@@ -517,13 +496,13 @@ export default function App(): JSX.Element {
         {successMessage ? (
           <div
             role="status"
-            className="mt-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800"
+            className="mt-5 rounded-md border-2 border-[#315f3d] bg-[#dff0e3] px-4 py-3 text-sm font-bold text-[#244a2d]"
           >
             {successMessage}
           </div>
         ) : null}
 
-        <div className="mt-5 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:hidden">
+        <div className="mt-5 flex items-center justify-between rounded-md border-2 border-[#172033] bg-white px-4 py-3 shadow-[4px_4px_0_#172033] sm:hidden">
           <div>
             <p className="text-sm font-semibold text-slate-900">
               {masterCv ? "Master CV ready" : "Master CV required"}
@@ -535,7 +514,7 @@ export default function App(): JSX.Element {
           <button
             type="button"
             onClick={() => setShowMasterCvEditor((visible) => !visible)}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white"
+            className="rounded-md border-2 border-[#172033] bg-[#ffcc4d] px-3 py-2 text-xs font-bold text-[#172033]"
           >
             {showMasterCvEditor ? "Close" : "Open"}
           </button>
@@ -556,10 +535,10 @@ export default function App(): JSX.Element {
         ) : null}
 
         {review ? (
-          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+          <section className="mt-6 rounded-lg border-2 border-[#172033] bg-white p-5 shadow-[5px_5px_0_#172033] sm:p-7">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#3157d5]">
                   Review before saving
                 </p>
                 <h2 className="mt-1 text-xl font-bold text-slate-950">
@@ -597,7 +576,7 @@ export default function App(): JSX.Element {
                     maxLength={300}
                     value={review.title}
                     onChange={(event) => updateReview("title", event.target.value)}
-                    className="h-11 rounded-lg border border-slate-300 px-3 font-normal text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="h-11 rounded-md border-2 border-[#9ca1ad] px-3 font-normal text-[#172033] outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dbe3ff]"
                   />
                 </label>
                 <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
@@ -607,7 +586,7 @@ export default function App(): JSX.Element {
                     maxLength={200}
                     value={review.company}
                     onChange={(event) => updateReview("company", event.target.value)}
-                    className="h-11 rounded-lg border border-slate-300 px-3 font-normal text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    className="h-11 rounded-md border-2 border-[#9ca1ad] px-3 font-normal text-[#172033] outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dbe3ff]"
                   />
                 </label>
               </div>
@@ -619,7 +598,7 @@ export default function App(): JSX.Element {
                   value={review.location ?? ""}
                   onChange={(event) => updateReview("location", event.target.value)}
                   placeholder="Optional"
-                  className="h-11 rounded-lg border border-slate-300 px-3 font-normal text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="h-11 rounded-md border-2 border-[#9ca1ad] px-3 font-normal text-[#172033] outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dbe3ff]"
                 />
               </label>
 
@@ -632,7 +611,7 @@ export default function App(): JSX.Element {
                   onChange={(event) =>
                     updateReview("description", event.target.value)
                   }
-                  className="resize-y rounded-lg border border-slate-300 px-3 py-3 font-normal leading-6 text-slate-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  className="resize-y rounded-md border-2 border-[#9ca1ad] px-3 py-3 font-normal leading-6 text-[#172033] outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dbe3ff]"
                 />
               </label>
 
@@ -640,7 +619,7 @@ export default function App(): JSX.Element {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-6 text-sm font-semibold text-white transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex h-11 items-center justify-center rounded-md border-2 border-[#172033] bg-[#ff7058] px-6 text-sm font-black text-[#172033] shadow-[3px_3px_0_#172033] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#172033] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3157d5] focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
                 >
                   {isSaving ? "Saving…" : "Add to application board"}
                 </button>
@@ -650,20 +629,20 @@ export default function App(): JSX.Element {
         ) : null}
 
         <section className="mt-10">
-          <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+          <div className="mb-5 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">
+              <h2 className="text-4xl font-black tracking-[-0.03em] text-[#172033]">
                 Applications
-              </p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">
-                Your job search board
               </h2>
+              <p className="mt-1 text-sm font-medium text-[#626979]">
+                Drag cards between stages as your applications progress.
+              </p>
             </div>
             <button
               type="button"
               onClick={() => void loadJobs()}
               disabled={isLoadingJobs}
-              className="self-start rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60"
+              className="self-start rounded-md border-2 border-[#172033] bg-white px-4 py-2 text-sm font-bold text-[#172033] shadow-[3px_3px_0_#172033] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#172033] disabled:cursor-wait disabled:opacity-60"
             >
               {isLoadingJobs ? "Refreshing…" : "Refresh"}
             </button>
