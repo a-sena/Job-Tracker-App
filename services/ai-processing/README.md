@@ -63,6 +63,19 @@ docker run --rm -p 8000:8000 -e OPENAI_API_KEY="<key>" job-tracker-ai
 
 Do not commit `.env` or put the API key in request payloads.
 
+## PDF Master CV import
+
+```http
+POST /api/extract-master-cv
+Content-Type: multipart/form-data
+```
+
+The `file` field accepts a text-based, non-encrypted PDF. Uploads are limited to
+8 MB, 30 pages, and 100,000 extracted characters. The service validates the PDF
+signature, extracts text locally with `pypdf`, and uses Pydantic-backed Structured
+Outputs to enforce the CV schema while extracting only facts present in the
+source. Scanned image-only PDFs are not accepted until an OCR pipeline is added.
+
 ## Vacancy extraction
 
 ```http
@@ -129,6 +142,12 @@ Content-Type: application/json
 A successful response has `Content-Type: application/pdf` and
 `Content-Disposition: attachment`.
 
+The .NET service uses `POST /api/tailored-cv-package` internally. It returns the
+same validated document and PDF together with the ATS score, keyword evidence,
+safe filename, and base64-encoded PDF bytes so one AI result can be persisted
+without regeneration. Browser clients should use the .NET download endpoint
+instead of calling this internal endpoint directly.
+
 ## Guardrail boundary
 
 The model is allowed to produce only:
@@ -137,6 +156,13 @@ The model is allowed to produce only:
 - one indexed rewrite for every existing source work-history bullet;
 - matched and unsupported keywords;
 - an evidence-based ATS score.
+
+When the first grounded result scores below
+`OPENAI_ATS_REFINEMENT_THRESHOLD` (default `75`), the service performs one bounded
+refinement pass. The second result is accepted only when it preserves the exact
+matched/missing keyword classification, keeps every source bullet mapping valid,
+does not reduce exact supported-keyword coverage, and improves the score. Set the
+threshold to `0` to disable this extra API call.
 
 Company names, titles, dates, contact details, skills, education, certifications,
 and languages are always copied from the Master CV. Output with missing, duplicate,

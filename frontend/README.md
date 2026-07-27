@@ -8,8 +8,10 @@ The page supports:
 - vacancy URL submission through the .NET API;
 - editable review of automatically extracted job details;
 - creation of job applications;
+- structured Master CV editing plus PDF and JSON import;
+- per-application ATS tailoring and persisted PDF generation;
 - drag-and-drop status updates with optimistic UI and rollback;
-- a disabled PDF action until a tailored CV exists.
+- ATS score badges and tailored PDF downloads.
 
 ## Run
 
@@ -42,6 +44,7 @@ frontend/
 ├── src/App.tsx
 ├── src/main.tsx
 ├── src/index.css
+├── src/components/cvs/MasterCvEditor.tsx
 ├── src/components/jobs/JobKanbanBoard.tsx
 ├── tailwind.config.ts
 └── vite.config.ts

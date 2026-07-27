@@ -23,6 +23,7 @@ export interface JobApplication {
   company: string;
   appliedDate: string;
   atsMatchScore: number | null;
+  missingKeywords: string[];
   tailoredPdfUrl?: string | null;
   status: JobStatus;
 }
@@ -45,6 +46,11 @@ export interface JobKanbanBoardProps {
     jobId: string,
     status: JobStatus,
   ) => void;
+  /**
+   * Generates and persists a tailored CV. Reject with an Error to display a
+   * rollback-style toast on the card.
+   */
+  onGenerateTailoredCv?: (jobId: string) => Promise<void>;
 }
 
 type JobsByStatus = Record<JobStatus, JobApplication[]>;
@@ -282,6 +288,25 @@ function PdfIcon(): JSX.Element {
   );
 }
 
+function RefreshIcon(): JSX.Element {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.8}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.023 9.348h4.992V4.356m-.97 10.122A8.25 8.25 0 1 1 6.41 5.18L2.985 8.607"
+      />
+    </svg>
+  );
+}
+
 function CloseIcon(): JSX.Element {
   return (
     <svg
@@ -301,11 +326,15 @@ export function JobKanbanBoard({
   initialJobs,
   apiBaseUrl = "",
   onStatusChangeConfirmed,
+  onGenerateTailoredCv,
 }: JobKanbanBoardProps): JSX.Element {
   const [jobsByStatus, setJobsByStatus] = useState<JobsByStatus>(() =>
     createBoard(initialJobs),
   );
   const [pendingJobIds, setPendingJobIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [tailoringJobIds, setTailoringJobIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -459,6 +488,39 @@ export function JobKanbanBoard({
     [jobsByStatus, pendingJobIds, persistStatus],
   );
 
+  const generateTailoredCv = useCallback(
+    async (job: JobApplication): Promise<void> => {
+      if (!onGenerateTailoredCv || tailoringJobIds.has(job.id)) {
+        return;
+      }
+
+      setTailoringJobIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        nextIds.add(job.id);
+        return nextIds;
+      });
+
+      try {
+        await onGenerateTailoredCv(job.id);
+      } catch (error) {
+        setToast({
+          id: Date.now(),
+          message:
+            error instanceof Error
+              ? error.message
+              : `Could not tailor the CV for “${job.title}”.`,
+        });
+      } finally {
+        setTailoringJobIds((currentIds) => {
+          const nextIds = new Set(currentIds);
+          nextIds.delete(job.id);
+          return nextIds;
+        });
+      }
+    },
+    [onGenerateTailoredCv, tailoringJobIds],
+  );
+
   return (
     <section aria-label="Job application Kanban board" className="w-full">
       <DragDropContext onDragEnd={handleDragEnd}>
@@ -505,6 +567,7 @@ export function JobKanbanBoard({
                       {jobs.map((job, index) => {
                         const atsBadge = getAtsBadge(job.atsMatchScore);
                         const isSaving = pendingJobIds.has(job.id);
+                        const isTailoring = tailoringJobIds.has(job.id);
                         const pdfUrl = isSafePdfUrl(job.tailoredPdfUrl)
                           ? job.tailoredPdfUrl
                           : null;
@@ -514,7 +577,7 @@ export function JobKanbanBoard({
                             key={job.id}
                             draggableId={job.id}
                             index={index}
-                            isDragDisabled={isSaving}
+                            isDragDisabled={isSaving || isTailoring}
                           >
                             {(dragProvided, dragSnapshot) => (
                               <article
@@ -528,7 +591,9 @@ export function JobKanbanBoard({
                                   dragSnapshot.isDragging
                                     ? "rotate-[1deg] border-blue-300 shadow-xl ring-2 ring-blue-200"
                                     : "",
-                                  isSaving ? "cursor-wait opacity-70" : "cursor-grab",
+                                  isSaving || isTailoring
+                                    ? "cursor-wait opacity-70"
+                                    : "cursor-grab",
                                 ].join(" ")}
                                 aria-label={`${job.title} at ${job.company}`}
                               >
@@ -548,6 +613,19 @@ export function JobKanbanBoard({
                                   </span>
                                 </div>
 
+                                {job.missingKeywords.length > 0 ? (
+                                  <p
+                                    className="mt-3 line-clamp-2 text-[11px] leading-4 text-slate-500"
+                                    title={job.missingKeywords.join(", ")}
+                                  >
+                                    <span className="font-semibold text-slate-600">
+                                      Missing:
+                                    </span>{" "}
+                                    {job.missingKeywords.slice(0, 3).join(", ")}
+                                    {job.missingKeywords.length > 3 ? "…" : ""}
+                                  </p>
+                                ) : null}
+
                                 <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -562,34 +640,56 @@ export function JobKanbanBoard({
                                   </div>
 
                                   {pdfUrl ? (
-                                    <a
-                                      href={pdfUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                                    >
-                                      <PdfIcon />
-                                      View Tailored PDF
-                                    </a>
-                                  ) : (
+                                    <div className="flex items-center gap-1.5">
+                                      <a
+                                        href={pdfUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                                      >
+                                        <PdfIcon />
+                                        View PDF
+                                      </a>
+                                      {onGenerateTailoredCv ? (
+                                        <button
+                                          type="button"
+                                          disabled={isTailoring}
+                                          onClick={() =>
+                                            void generateTailoredCv(job)
+                                          }
+                                          title="Generate a new optimized version"
+                                          aria-label={`Re-tailor CV for ${job.title}`}
+                                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:border-blue-400 hover:text-blue-700 disabled:cursor-wait disabled:opacity-60"
+                                        >
+                                          <RefreshIcon />
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  ) : onGenerateTailoredCv ? (
                                     <button
                                       type="button"
-                                      disabled
-                                      title="A tailored PDF has not been generated yet."
-                                      className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-md bg-slate-100 px-2.5 py-2 text-xs font-semibold text-slate-400"
+                                      disabled={isTailoring}
+                                      onClick={() => void generateTailoredCv(job)}
+                                      className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
                                     >
                                       <PdfIcon />
-                                      View Tailored PDF
+                                      {isTailoring ? "Tailoring…" : "Tailor CV"}
                                     </button>
+                                  ) : (
+                                    <span className="text-xs font-medium text-slate-400">
+                                      No tailored PDF
+                                    </span>
                                   )}
                                 </div>
 
-                                {isSaving ? (
+                                {isSaving || isTailoring ? (
                                   <p
                                     aria-live="polite"
                                     className="mt-2 text-right text-[11px] font-medium text-slate-500"
                                   >
-                                    Saving status…
+                                    {isTailoring
+                                      ? "Generating ATS-matched CV…"
+                                      : "Saving status…"}
                                   </p>
                                 ) : null}
                               </article>

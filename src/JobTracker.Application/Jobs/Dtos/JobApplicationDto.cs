@@ -12,4 +12,7 @@ public sealed record JobApplicationDto(
     string? Location,
     JobApplicationStatus Status,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    decimal? AtsMatchScore,
+    Guid? TailoredCvId,
+    IReadOnlyList<string> MissingKeywords);

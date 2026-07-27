@@ -3,6 +3,9 @@ import JobKanbanBoard, {
   type JobApplication,
   type JobStatus,
 } from "./components/jobs/JobKanbanBoard";
+import MasterCvEditor, {
+  type MasterCv,
+} from "./components/cvs/MasterCvEditor";
 
 interface ApiJobApplication {
   id: string;
@@ -15,6 +18,9 @@ interface ApiJobApplication {
   status: JobStatus;
   createdAt: string;
   updatedAt: string;
+  atsMatchScore: number | null;
+  tailoredCvId: string | null;
+  missingKeywords: string[];
 }
 
 interface ExtractedJob {
@@ -29,6 +35,18 @@ interface ExtractedJob {
 interface ProblemDetails {
   detail?: string;
   title?: string;
+}
+
+interface TailoredCv {
+  id: string;
+  masterCvId: string;
+  jobApplicationId: string;
+  summary: string;
+  atsMatchScore: number;
+  missingKeywords: string[];
+  pdfFileName: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)
@@ -88,8 +106,11 @@ function toBoardJob(job: ApiJobApplication): JobApplication {
     title: job.title,
     company: job.company,
     appliedDate: job.createdAt,
-    atsMatchScore: null,
-    tailoredPdfUrl: null,
+    atsMatchScore: job.atsMatchScore,
+    missingKeywords: job.missingKeywords ?? [],
+    tailoredPdfUrl: job.tailoredCvId
+      ? apiUrl(`/api/jobs/${encodeURIComponent(job.id)}/tailored-cv/pdf`)
+      : null,
     status: job.status,
   };
 }
@@ -146,6 +167,7 @@ function SparklesIcon(): JSX.Element {
 }
 
 export default function App(): JSX.Element {
+  const [userId] = useState(getLocalUserId);
   const [jobs, setJobs] = useState<ApiJobApplication[]>([]);
   const [boardRevision, setBoardRevision] = useState(0);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
@@ -156,6 +178,9 @@ export default function App(): JSX.Element {
   const [isSaving, setIsSaving] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [masterCv, setMasterCv] = useState<MasterCv | null>(null);
+  const [isMasterCvLoading, setIsMasterCvLoading] = useState(true);
+  const [showMasterCvEditor, setShowMasterCvEditor] = useState(false);
 
   const boardJobs = useMemo(() => jobs.map(toBoardJob), [jobs]);
 
@@ -179,6 +204,49 @@ export default function App(): JSX.Element {
   useEffect(() => {
     void loadJobs();
   }, [loadJobs]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadMasterCv(): Promise<void> {
+      setIsMasterCvLoading(true);
+      try {
+        const response = await fetch(
+          apiUrl(`/api/master-cvs/${encodeURIComponent(userId)}`),
+          { headers: { Accept: "application/json" } },
+        );
+
+        if (response.status === 404) {
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(await readApiError(response));
+        }
+
+        if (!isCancelled) {
+          setMasterCv((await response.json()) as MasterCv);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setJobsError(
+            error instanceof Error
+              ? error.message
+              : "Could not load the Master CV.",
+          );
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsMasterCvLoading(false);
+        }
+      }
+    }
+
+    void loadMasterCv();
+    return () => {
+      isCancelled = true;
+    };
+  }, [userId]);
 
   useEffect(() => {
     if (!successMessage) {
@@ -245,7 +313,7 @@ export default function App(): JSX.Element {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: getLocalUserId(),
+          userId,
           jobUrl: review.jobUrl,
           title: review.title.trim(),
           company: review.company.trim(),
@@ -290,6 +358,44 @@ export default function App(): JSX.Element {
     );
   }
 
+  async function handleTailorCv(jobId: string): Promise<void> {
+    if (!masterCv) {
+      setShowMasterCvEditor(true);
+      throw new Error("Save your Master CV before tailoring this application.");
+    }
+
+    const tailoredCv = await apiRequest<TailoredCv>(
+      `/api/jobs/${encodeURIComponent(jobId)}/tailored-cv`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+
+    setJobs((currentJobs) =>
+      currentJobs.map((job) =>
+        job.id === jobId
+          ? {
+              ...job,
+              atsMatchScore: tailoredCv.atsMatchScore,
+              tailoredCvId: tailoredCv.id,
+              missingKeywords: tailoredCv.missingKeywords,
+            }
+          : job,
+      ),
+    );
+    setBoardRevision((revision) => revision + 1);
+    const missingKeywordMessage =
+      tailoredCv.missingKeywords.length > 0
+        ? ` Unsupported requirements still missing: ${tailoredCv.missingKeywords
+            .slice(0, 3)
+            .join(", ")}${tailoredCv.missingKeywords.length > 3 ? "…" : ""}.`
+        : " No unsupported priority keywords were identified.";
+    setSuccessMessage(
+      `Tailored CV generated with a ${Math.round(tailoredCv.atsMatchScore)}% ATS match.${missingKeywordMessage}`,
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="border-b border-slate-200 bg-white">
@@ -305,10 +411,18 @@ export default function App(): JSX.Element {
               <p className="text-xs text-slate-500">Application workspace</p>
             </div>
           </div>
-          <div className="hidden items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 sm:flex">
+          <button
+            type="button"
+            onClick={() => setShowMasterCvEditor((visible) => !visible)}
+            className="hidden items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 sm:flex"
+          >
             <SparklesIcon />
-            CV tailoring ready
-          </div>
+            {isMasterCvLoading
+              ? "Checking Master CV…"
+              : masterCv
+                ? "Master CV ready"
+                : "Add Master CV"}
+          </button>
         </div>
       </header>
 
@@ -407,6 +521,38 @@ export default function App(): JSX.Element {
           >
             {successMessage}
           </div>
+        ) : null}
+
+        <div className="mt-5 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:hidden">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {masterCv ? "Master CV ready" : "Master CV required"}
+            </p>
+            <p className="text-xs text-slate-500">
+              Required for ATS scoring and tailored PDFs.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowMasterCvEditor((visible) => !visible)}
+            className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white"
+          >
+            {showMasterCvEditor ? "Close" : "Open"}
+          </button>
+        </div>
+
+        {showMasterCvEditor ? (
+          <MasterCvEditor
+            userId={userId}
+            apiBaseUrl={API_BASE_URL}
+            initialMasterCv={masterCv}
+            onSaved={(savedMasterCv) => {
+              setMasterCv(savedMasterCv);
+              setShowMasterCvEditor(false);
+              setSuccessMessage("Master CV saved. ATS tailoring is ready.");
+            }}
+            onClose={() => setShowMasterCvEditor(false)}
+          />
         ) : null}
 
         {review ? (
@@ -547,6 +693,7 @@ export default function App(): JSX.Element {
               initialJobs={boardJobs}
               apiBaseUrl={API_BASE_URL}
               onStatusChangeConfirmed={handleStatusConfirmed}
+              onGenerateTailoredCv={handleTailorCv}
             />
           )}
         </section>

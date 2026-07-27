@@ -1,3 +1,5 @@
+using JobTracker.Application.Cvs;
+using JobTracker.Application.Cvs.Dtos;
 using JobTracker.Application.Jobs;
 using JobTracker.Application.Jobs.Dtos;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +11,8 @@ namespace JobTracker.Api.Controllers;
 [Produces("application/json")]
 public sealed class JobsController(
     IJobApplicationService jobApplicationService,
-    IJobExtractionService jobExtractionService) : ControllerBase
+    IJobExtractionService jobExtractionService,
+    ICvService cvService) : ControllerBase
 {
     /// <summary>
     /// Extracts vacancy details from a public job-posting URL for user review.
@@ -82,6 +85,74 @@ public sealed class JobsController(
             nameof(GetById),
             new { id = createdJob.Id },
             createdJob);
+    }
+
+    /// <summary>
+    /// Generates and persists a truth-grounded tailored CV for one application.
+    /// </summary>
+    [HttpPost("{id:guid}/tailored-cv")]
+    [ProducesResponseType<TailoredCvDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status504GatewayTimeout)]
+    public async Task<ActionResult<TailoredCvDto>> GenerateTailoredCv(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var tailoredCv = await cvService.GenerateTailoredCvAsync(
+                id,
+                cancellationToken);
+            return Ok(tailoredCv);
+        }
+        catch (CvWorkflowException exception)
+        {
+            return Problem(
+                statusCode: exception.StatusCode,
+                title: "CV tailoring failed",
+                detail: exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Returns metadata for the latest tailored CV generated for an application.
+    /// </summary>
+    [HttpGet("{id:guid}/tailored-cv")]
+    [ProducesResponseType<TailoredCvDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TailoredCvDto>> GetTailoredCv(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var tailoredCv = await cvService.GetLatestTailoredCvAsync(
+            id,
+            cancellationToken);
+        return tailoredCv is null ? NotFound() : Ok(tailoredCv);
+    }
+
+    /// <summary>
+    /// Downloads the latest persisted tailored CV PDF.
+    /// </summary>
+    [HttpGet("{id:guid}/tailored-cv/pdf")]
+    [Produces("application/pdf")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DownloadTailoredCv(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var pdf = await cvService.GetLatestPdfAsync(id, cancellationToken);
+
+        return pdf is null
+            ? NotFound()
+            : File(
+                pdf.Content,
+                "application/pdf",
+                pdf.FileName,
+                enableRangeProcessing: true);
     }
 
     /// <summary>

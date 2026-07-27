@@ -1,4 +1,6 @@
 using JobTracker.Application.Abstractions.Persistence;
+using JobTracker.Application.Cvs;
+using JobTracker.Infrastructure.Cvs;
 using JobTracker.Application.Jobs;
 using JobTracker.Infrastructure.Jobs;
 using JobTracker.Infrastructure.Persistence;
@@ -25,6 +27,8 @@ public static class DependencyInjection
                 npgsqlOptions => npgsqlOptions.EnableRetryOnFailure()));
 
         services.AddScoped<IJobApplicationRepository, JobApplicationRepository>();
+        services.AddScoped<IMasterCvRepository, MasterCvRepository>();
+        services.AddScoped<ITailoredCvRepository, TailoredCvRepository>();
 
         var aiProcessingBaseUrl = configuration["Services:AiProcessing:BaseUrl"]
             ?? throw new InvalidOperationException(
@@ -34,6 +38,18 @@ public static class DependencyInjection
         {
             client.BaseAddress = new Uri(aiProcessingBaseUrl, UriKind.Absolute);
             client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
+        services.AddHttpClient<ICvTailoringGateway, CvTailoringGateway>(client =>
+        {
+            client.BaseAddress = new Uri(aiProcessingBaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(120);
+        });
+
+        services.AddHttpClient<IMasterCvImportGateway, MasterCvImportGateway>(client =>
+        {
+            client.BaseAddress = new Uri(aiProcessingBaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(120);
         });
 
         return services;

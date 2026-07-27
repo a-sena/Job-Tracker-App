@@ -48,6 +48,16 @@ internal sealed class TailoredCvConfiguration : IEntityTypeConfiguration<Tailore
             .HasColumnType("text[]")
             .IsRequired();
 
+        builder.Property(tailoredCv => tailoredCv.PdfContent)
+            .HasColumnName("pdf_content")
+            .HasColumnType("bytea")
+            .IsRequired();
+
+        builder.Property(tailoredCv => tailoredCv.PdfFileName)
+            .HasColumnName("pdf_file_name")
+            .HasMaxLength(255)
+            .IsRequired();
+
         builder.Property(tailoredCv => tailoredCv.CreatedAt)
             .HasColumnName("created_at")
             .HasColumnType("timestamp with time zone")

@@ -57,13 +57,19 @@ public sealed class MasterCv
         return new MasterCv(userId, name.Trim(), content.Trim());
     }
 
-    public void UpdateContent(string content)
+    public void Update(string name, string content)
     {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("A CV name is required.", nameof(name));
+        }
+
         if (string.IsNullOrWhiteSpace(content))
         {
             throw new ArgumentException("CV content is required.", nameof(content));
         }
 
+        Name = name.Trim();
         Content = content.Trim();
         UpdatedAt = DateTimeOffset.UtcNow;
     }

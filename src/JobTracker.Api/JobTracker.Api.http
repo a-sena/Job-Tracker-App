@@ -1,5 +1,6 @@
 @JobTracker_Api_HostAddress = http://localhost:5080
 @JobId = 00000000-0000-0000-0000-000000000000
+@UserId = c86e2881-b341-4eef-845c-9f826c0d0307
 
 GET {{JobTracker_Api_HostAddress}}/api/jobs
 Accept: application/json
@@ -10,7 +11,7 @@ POST {{JobTracker_Api_HostAddress}}/api/jobs
 Content-Type: application/json
 
 {
-  "userId": "c86e2881-b341-4eef-845c-9f826c0d0307",
+  "userId": "{{UserId}}",
   "jobUrl": "https://example.no/jobs/123",
   "title": "Senior Software Engineer",
   "company": "Example AS",
@@ -31,3 +32,57 @@ Content-Type: application/json
 
 DELETE {{JobTracker_Api_HostAddress}}/api/jobs/{{JobId}}
 
+###
+
+PUT {{JobTracker_Api_HostAddress}}/api/master-cvs/{{UserId}}
+Content-Type: application/json
+
+{
+  "name": "Master CV",
+  "content": {
+    "fullName": "Ada Lovelace",
+    "professionalSummary": "Backend engineer building reliable APIs and data services.",
+    "email": "ada@example.no",
+    "phone": "+47 999 99 999",
+    "location": "Oslo, Norway",
+    "linkedin": "https://www.linkedin.com/in/example",
+    "website": null,
+    "skills": ["C#", ".NET", "PostgreSQL", "REST APIs"],
+    "workExperience": [
+      {
+        "company": "Example AS",
+        "jobTitle": "Software Engineer",
+        "startDate": "2022",
+        "endDate": "Present",
+        "location": "Oslo",
+        "bulletPoints": [
+          "Built REST APIs in C#.",
+          "Improved PostgreSQL query performance."
+        ]
+      }
+    ],
+    "education": [],
+    "certifications": [],
+    "languages": ["Norwegian", "English"]
+  }
+}
+
+###
+
+POST {{JobTracker_Api_HostAddress}}/api/master-cvs/import-pdf
+Content-Type: multipart/form-data; boundary=JobTrackerBoundary
+
+--JobTrackerBoundary
+Content-Disposition: form-data; name="file"; filename="master-cv.pdf"
+Content-Type: application/pdf
+
+< ./master-cv.pdf
+--JobTrackerBoundary--
+
+###
+
+POST {{JobTracker_Api_HostAddress}}/api/jobs/{{JobId}}/tailored-cv
+
+###
+
+GET {{JobTracker_Api_HostAddress}}/api/jobs/{{JobId}}/tailored-cv/pdf

@@ -15,7 +15,9 @@ public sealed class TailoredCv
         string summary,
         string content,
         decimal atsMatchScore,
-        IReadOnlyCollection<string> missingKeywords)
+        IReadOnlyCollection<string> missingKeywords,
+        byte[] pdfContent,
+        string pdfFileName)
     {
         Id = Guid.NewGuid();
         MasterCvId = masterCvId;
@@ -28,6 +30,8 @@ public sealed class TailoredCv
             .Select(keyword => keyword.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        PdfContent = pdfContent.ToArray();
+        PdfFileName = pdfFileName;
         CreatedAt = DateTimeOffset.UtcNow;
         UpdatedAt = CreatedAt;
     }
@@ -49,6 +53,10 @@ public sealed class TailoredCv
 
     public string[] MissingKeywords { get; private set; } = [];
 
+    public byte[] PdfContent { get; private set; } = [];
+
+    public string PdfFileName { get; private set; } = string.Empty;
+
     public DateTimeOffset CreatedAt { get; private set; }
 
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -63,7 +71,9 @@ public sealed class TailoredCv
         string summary,
         string content,
         decimal atsMatchScore,
-        IReadOnlyCollection<string> missingKeywords)
+        IReadOnlyCollection<string> missingKeywords,
+        byte[] pdfContent,
+        string pdfFileName)
     {
         if (masterCvId == Guid.Empty)
         {
@@ -94,6 +104,17 @@ public sealed class TailoredCv
         }
 
         ArgumentNullException.ThrowIfNull(missingKeywords);
+        ArgumentNullException.ThrowIfNull(pdfContent);
+
+        if (pdfContent.Length == 0)
+        {
+            throw new ArgumentException("PDF content is required.", nameof(pdfContent));
+        }
+
+        if (string.IsNullOrWhiteSpace(pdfFileName))
+        {
+            throw new ArgumentException("A PDF filename is required.", nameof(pdfFileName));
+        }
 
         return new TailoredCv(
             masterCvId,
@@ -101,6 +122,8 @@ public sealed class TailoredCv
             summary.Trim(),
             content.Trim(),
             atsMatchScore,
-            missingKeywords);
+            missingKeywords,
+            pdfContent,
+            pdfFileName.Trim());
     }
 }

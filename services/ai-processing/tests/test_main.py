@@ -1,3 +1,4 @@
+import base64
 from types import SimpleNamespace
 from typing import Any
 
@@ -11,11 +12,16 @@ from app.main import (
     TailoringResult,
     build_tailoring_prompt,
     extract_job_details,
+    extract_master_cv_with_openai,
+    extract_text_from_pdf,
+    generate_tailored_cv_package,
+    prioritize_skills,
     render_cv_html,
     tailor_cv_with_openai,
     validate_public_job_url,
     validate_and_merge_tailoring,
 )
+from weasyprint import HTML
 
 
 def make_request(full_name: str = "Ada Lovelace") -> GenerateTailoredCvRequest:
@@ -123,18 +129,46 @@ def test_html_template_autoescapes_candidate_content() -> None:
 
 
 class FakeCompletions:
-    def __init__(self, content: str) -> None:
-        self.content = content
+    def __init__(self, content: str | list[str]) -> None:
+        self.contents = [content] if isinstance(content, str) else content
         self.call_arguments: dict[str, Any] | None = None
+        self.call_history: list[dict[str, Any]] = []
+        self.call_index = 0
+
+    def next_content(self) -> str:
+        content = self.contents[min(self.call_index, len(self.contents) - 1)]
+        self.call_index += 1
+        return content
 
     async def create(self, **kwargs: Any) -> SimpleNamespace:
         self.call_arguments = kwargs
+        self.call_history.append(kwargs)
+        content = self.next_content()
         return SimpleNamespace(
             choices=[
                 SimpleNamespace(
                     finish_reason="stop",
                     message=SimpleNamespace(
-                        content=self.content,
+                        content=content,
+                        refusal=None,
+                    ),
+                )
+            ]
+        )
+
+    async def parse(self, **kwargs: Any) -> SimpleNamespace:
+        self.call_arguments = kwargs
+        self.call_history.append(kwargs)
+        response_model = kwargs["response_format"]
+        content = self.next_content()
+        parsed = response_model.model_validate_json(content)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(
+                        content=content,
+                        parsed=parsed,
                         refusal=None,
                     ),
                 )
@@ -143,7 +177,7 @@ class FakeCompletions:
 
 
 class FakeOpenAiClient:
-    def __init__(self, content: str) -> None:
+    def __init__(self, content: str | list[str]) -> None:
         self.chat = SimpleNamespace(completions=FakeCompletions(content))
 
 
@@ -152,7 +186,10 @@ async def test_openai_call_uses_requested_model_and_json_mode() -> None:
     request = make_request()
     expected = make_tailoring()
     client = FakeOpenAiClient(expected.model_dump_json())
-    settings = Settings(openai_api_key="test-key")
+    settings = Settings(
+        openai_api_key="test-key",
+        openai_ats_refinement_threshold=0,
+    )
 
     result = await tailor_cv_with_openai(  # type: ignore[arg-type]
         request,
@@ -166,6 +203,105 @@ async def test_openai_call_uses_requested_model_and_json_mode() -> None:
     assert arguments["response_format"] == {"type": "json_object"}
     assert arguments["temperature"] == 0.1
     assert result.ats_match_score == 72
+
+
+@pytest.mark.asyncio
+async def test_low_ats_result_gets_grounded_refinement() -> None:
+    initial = make_tailoring()
+    initial.ats_match_score = 62
+    initial.professional_summary = "Backend engineer building reliable services."
+    improved = make_tailoring()
+    improved.ats_match_score = 81
+    improved.professional_summary = (
+        "Backend engineer building reliable C# REST APIs with PostgreSQL."
+    )
+    client = FakeOpenAiClient(
+        [initial.model_dump_json(), improved.model_dump_json()]
+    )
+    settings = Settings(
+        openai_api_key="test-key",
+        openai_ats_refinement_threshold=75,
+    )
+
+    result = await tailor_cv_with_openai(  # type: ignore[arg-type]
+        make_request(),
+        client,
+        settings,
+    )
+
+    assert result.ats_match_score == 81
+    assert len(client.chat.completions.call_history) == 2
+    second_prompt = client.chat.completions.call_history[1]["messages"][1]["content"]
+    assert "<first_draft_json>" in second_prompt
+
+
+def test_existing_job_relevant_skills_are_prioritized_without_changes() -> None:
+    skills = ["Docker", "C#", "PostgreSQL", "Communication"]
+
+    prioritized = prioritize_skills(
+        skills,
+        "We need PostgreSQL and C# experience.",
+    )
+
+    assert prioritized == ["C#", "PostgreSQL", "Docker", "Communication"]
+    assert set(prioritized) == set(skills)
+
+
+@pytest.mark.asyncio
+async def test_package_contains_metadata_document_and_pdf(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = make_request()
+    client = FakeOpenAiClient(make_tailoring().model_dump_json())
+    settings = Settings(openai_api_key="test-key")
+    monkeypatch.setattr("app.main.render_pdf", lambda _document: b"%PDF-test")
+
+    package = await generate_tailored_cv_package(  # type: ignore[arg-type]
+        request,
+        client,
+        settings,
+    )
+
+    assert package.ats_match_score == 72
+    assert package.tailored_cv.full_name == "Ada Lovelace"
+    assert package.missing_keywords == ["Kubernetes", "distributed systems"]
+    assert base64.b64decode(package.pdf_base64) == b"%PDF-test"
+    assert package.file_name == "ada-lovelace-tailored-cv.pdf"
+
+
+def test_extract_text_from_text_based_pdf() -> None:
+    pdf = HTML(
+        string=(
+            "<h1>Ada Lovelace</h1>"
+            "<p>Backend engineer with C# and PostgreSQL experience.</p>"
+        )
+    ).write_pdf()
+
+    text, warnings = extract_text_from_pdf(pdf, max_pages=5, max_text_characters=5_000)
+
+    assert "Ada Lovelace" in text
+    assert "PostgreSQL" in text
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+async def test_pdf_cv_ai_extraction_uses_structured_outputs() -> None:
+    expected = make_request().master_cv
+    client = FakeOpenAiClient(expected.model_dump_json())
+    settings = Settings(openai_api_key="test-key")
+
+    extracted = await extract_master_cv_with_openai(  # type: ignore[arg-type]
+        "Ada Lovelace - Backend engineer with C# and PostgreSQL experience.",
+        client,
+        settings,
+    )
+
+    arguments = client.chat.completions.call_arguments
+    assert arguments is not None
+    assert arguments["model"] == "gpt-4o-mini"
+    assert arguments["response_format"].__name__ == "MasterCv"
+    assert arguments["temperature"] == 0
+    assert extracted.full_name == "Ada Lovelace"
 
 
 def test_extract_job_details_prefers_schema_org_job_posting() -> None:

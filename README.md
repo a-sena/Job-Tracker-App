@@ -38,8 +38,13 @@ cd frontend
 npm run dev
 ```
 
-Open `http://localhost:5173`. Paste a public vacancy URL, review the extracted
-fields, add it to the board, and drag the card between status columns.
+Open `http://localhost:5173`. Enter your factual Master CV manually, import JSON,
+or upload a text-based PDF. Review every extracted field, paste a public vacancy
+URL, add it to the board, and select **Tailor CV**.
+The resulting ATS score and downloadable PDF are persisted with the application.
+Existing skills are prioritized for each vacancy, and low-scoring grounded drafts
+receive one guarded refinement pass. Unsupported requirements remain visible on
+the Kanban card instead of being fabricated into the CV.
 
 The FastAPI service requires a local
 `services/ai-processing/.env` containing `OPENAI_API_KEY` before it starts.
@@ -181,10 +186,25 @@ Example requests are available in
 | `GET` | `/api/jobs/{id}` | One application |
 | `POST` | `/api/jobs/extract` | Extracts a public vacancy for review |
 | `POST` | `/api/jobs` | Creates an application with `Applied` status |
+| `POST` | `/api/jobs/{id}/tailored-cv` | Generates and stores a tailored CV |
+| `GET` | `/api/jobs/{id}/tailored-cv` | Latest tailored CV metadata |
+| `GET` | `/api/jobs/{id}/tailored-cv/pdf` | Downloads the stored PDF |
 | `PUT` | `/api/jobs/{id}/status` | Updates its Kanban status |
 | `DELETE` | `/api/jobs/{id}` | Deletes it and its tailored CV records |
 
 Valid status values are `Applied`, `Interviewing`, `Offer`, and `Rejected`.
+
+Master CV endpoints:
+
+| Method | Route | Result |
+|---|---|---|
+| `GET` | `/api/master-cvs/{userId}` | Current factual Master CV |
+| `PUT` | `/api/master-cvs/{userId}` | Creates or replaces the Master CV |
+| `POST` | `/api/master-cvs/import-pdf` | Extracts editable CV fields from a PDF |
+
+PDF imports accept text-based, non-encrypted PDF files up to 8 MB. Scanned image
+PDFs require OCR and are rejected with a clear validation message in this version.
+Imported data is never saved automatically; the user must review and save it.
 
 `UserId` is currently accepted in the create DTO because authentication is outside
 this scaffold. Before exposing the API publicly, derive it from authenticated

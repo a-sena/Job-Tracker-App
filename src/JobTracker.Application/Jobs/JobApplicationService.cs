@@ -6,13 +6,21 @@ using JobTracker.Domain.Entities;
 namespace JobTracker.Application.Jobs;
 
 internal sealed class JobApplicationService(
-    IJobApplicationRepository repository) : IJobApplicationService
+    IJobApplicationRepository repository,
+    ITailoredCvRepository tailoredCvRepository) : IJobApplicationService
 {
     public async Task<IReadOnlyList<JobApplicationDto>> GetAllAsync(
         CancellationToken cancellationToken = default)
     {
         var jobApplications = await repository.GetAllAsync(cancellationToken);
-        return jobApplications.Select(jobApplication => jobApplication.ToDto()).ToArray();
+        var summaries = await tailoredCvRepository.GetLatestSummariesAsync(
+            jobApplications.Select(jobApplication => jobApplication.Id).ToArray(),
+            cancellationToken);
+
+        return jobApplications
+            .Select(jobApplication =>
+                jobApplication.ToDto(summaries.GetValueOrDefault(jobApplication.Id)))
+            .ToArray();
     }
 
     public async Task<JobApplicationDto?> GetByIdAsync(
@@ -23,7 +31,16 @@ internal sealed class JobApplicationService(
             id,
             cancellationToken: cancellationToken);
 
-        return jobApplication?.ToDto();
+        if (jobApplication is null)
+        {
+            return null;
+        }
+
+        var summaries = await tailoredCvRepository.GetLatestSummariesAsync(
+            [jobApplication.Id],
+            cancellationToken);
+
+        return jobApplication.ToDto(summaries.GetValueOrDefault(jobApplication.Id));
     }
 
     public async Task<JobApplicationDto> CreateAsync(
@@ -66,7 +83,11 @@ internal sealed class JobApplicationService(
         jobApplication.ChangeStatus(request.Status);
         await repository.SaveChangesAsync(cancellationToken);
 
-        return jobApplication.ToDto();
+        var summaries = await tailoredCvRepository.GetLatestSummariesAsync(
+            [jobApplication.Id],
+            cancellationToken);
+
+        return jobApplication.ToDto(summaries.GetValueOrDefault(jobApplication.Id));
     }
 
     public async Task<bool> DeleteAsync(
