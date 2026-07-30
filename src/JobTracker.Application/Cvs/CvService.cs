@@ -62,7 +62,13 @@ internal sealed class CvService(
 
         if (masterCv is null)
         {
-            masterCv = MasterCv.Create(userId, request.Name, content);
+            masterCv = MasterCv.Create(
+                userId,
+                request.Name,
+                content,
+                originalPdf: null,
+                originalFileName: null,
+                isDefault: true);
             await masterCvRepository.AddAsync(masterCv, cancellationToken);
         }
         else

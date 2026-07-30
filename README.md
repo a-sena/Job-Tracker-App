@@ -21,8 +21,7 @@ Terminal 1 - AI processing and vacancy extraction:
 ```powershell
 cd services\ai-processing
 $env:WEASYPRINT_DLL_DIRECTORIES = "C:\msys64\ucrt64\bin"
-.\.venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
 Terminal 2 - .NET API:
@@ -35,21 +34,20 @@ Terminal 3 - React frontend:
 
 ```powershell
 cd frontend
-npm run dev
+npm.cmd run dev
 ```
 
-Open `http://localhost:5173`. Enter your factual Master CV manually, import JSON,
-or upload a text-based PDF. Review every extracted field, paste a public vacancy
-URL, add it to the board, and select **Tailor CV**.
-The resulting ATS score and downloadable PDF are persisted with the application.
-Existing skills are prioritized for each vacancy, and low-scoring grounded drafts
-receive one guarded refinement pass. Unsupported requirements remain visible on
-the Kanban card instead of being fabricated into the CV.
+Open `http://localhost:5173`. The Application Studio guides one refresh-safe draft
+through four stages: select a saved CV and vacancy, review the original ATS match,
+generate a truth-grounded tailored CV, and prepare first-round interview questions.
+The application is added to the separate Kanban log only after the user chooses an
+existing or new category. Tailored CVs and interview questions are downloadable as
+PDFs. Unsupported requirements remain visible instead of being fabricated.
 
 The FastAPI service requires a local
 `services/ai-processing/.env` containing `OPENAI_API_KEY` before it starts.
-The key is only used when tailoring a CV; vacancy extraction itself does not call
-OpenAI.
+The key is used for PDF CV structuring, ATS review, tailoring, and interview
+questions. Vacancy webpage extraction itself does not call OpenAI.
 
 ## Project structure
 
@@ -61,6 +59,7 @@ Job-Tracker-App/
 ├── JobTracker.sln
 ├── frontend/
 │   ├── src/App.tsx
+│   ├── src/components/application/ApplicationWorkflow.tsx
 │   ├── src/components/jobs/JobKanbanBoard.tsx
 │   ├── package.json
 │   └── tsconfig.json
@@ -73,6 +72,8 @@ Job-Tracker-App/
 └── src/
     ├── JobTracker.Domain/
     │   ├── Entities/
+    │   │   ├── ApplicationCategory.cs
+    │   │   ├── ApplicationDraft.cs
     │   │   ├── JobApplication.cs
     │   │   ├── MasterCv.cs
     │   │   └── TailoredCv.cs
@@ -194,7 +195,30 @@ Example requests are available in
 
 Valid status values are `Applied`, `Interviewing`, `Offer`, and `Rejected`.
 
-Master CV endpoints:
+Application Studio endpoints:
+
+| Method | Route | Result |
+|---|---|---|
+| `GET` | `/api/application-workflow/draft?userId={id}` | Restores the active draft |
+| `POST` | `/api/application-workflow/draft` | Gets or creates an active draft |
+| `PUT` | `/api/application-workflow/draft/{id}/source` | Saves the selected CV and vacancy |
+| `POST` | `/api/application-workflow/draft/{id}/review` | Reviews the original ATS match |
+| `POST` | `/api/application-workflow/draft/{id}/tailor` | Generates the tailored CV |
+| `POST` | `/api/application-workflow/draft/{id}/interview-questions` | Generates first-round questions |
+| `POST` | `/api/application-workflow/draft/{id}/log` | Categorizes and logs the application |
+| `GET` | `/api/application-categories?userId={id}` | Lists saved application categories |
+
+Saved CV library endpoints:
+
+| Method | Route | Result |
+|---|---|---|
+| `GET` | `/api/cvs?userId={id}` | Lists saved CVs |
+| `POST` | `/api/cvs/import-pdf` | Imports, structures, and stores a PDF CV |
+| `PUT` | `/api/cvs/{id}` | Renames a saved CV |
+| `PUT` | `/api/cvs/{id}/default` | Selects the default CV |
+| `DELETE` | `/api/cvs/{id}` | Deletes a CV that is not in use |
+
+Legacy Master CV endpoints:
 
 | Method | Route | Result |
 |---|---|---|
@@ -202,9 +226,10 @@ Master CV endpoints:
 | `PUT` | `/api/master-cvs/{userId}` | Creates or replaces the Master CV |
 | `POST` | `/api/master-cvs/import-pdf` | Extracts editable CV fields from a PDF |
 
-PDF imports accept text-based, non-encrypted PDF files up to 8 MB. Scanned image
-PDFs require OCR and are rejected with a clear validation message in this version.
-Imported data is never saved automatically; the user must review and save it.
+PDF imports accept non-encrypted PDF files smaller than 8 MB. Text-based PDFs use
+local text extraction first; PDFs without selectable text fall back to OpenAI
+visual page analysis with response storage disabled. Users can save and select
+multiple CVs for different job types.
 
 `UserId` is currently accepted in the create DTO because authentication is outside
 this scaffold. Before exposing the API publicly, derive it from authenticated

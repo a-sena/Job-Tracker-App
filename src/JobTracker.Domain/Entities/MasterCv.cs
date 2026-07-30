@@ -10,12 +10,21 @@ public sealed class MasterCv
     {
     }
 
-    private MasterCv(Guid userId, string name, string content)
+    private MasterCv(
+        Guid userId,
+        string name,
+        string content,
+        byte[]? originalPdf,
+        string? originalFileName,
+        bool isDefault)
     {
         Id = Guid.NewGuid();
         UserId = userId;
         Name = name;
         Content = content;
+        OriginalPdf = originalPdf?.ToArray();
+        OriginalFileName = originalFileName;
+        IsDefault = isDefault;
         CreatedAt = DateTimeOffset.UtcNow;
         UpdatedAt = CreatedAt;
     }
@@ -31,6 +40,12 @@ public sealed class MasterCv
     /// </summary>
     public string Content { get; private set; } = string.Empty;
 
+    public byte[]? OriginalPdf { get; private set; }
+
+    public string? OriginalFileName { get; private set; }
+
+    public bool IsDefault { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
 
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -38,6 +53,15 @@ public sealed class MasterCv
     public ICollection<TailoredCv> TailoredCvs { get; } = new List<TailoredCv>();
 
     public static MasterCv Create(Guid userId, string name, string content)
+        => Create(userId, name, content, null, null, false);
+
+    public static MasterCv Create(
+        Guid userId,
+        string name,
+        string content,
+        byte[]? originalPdf,
+        string? originalFileName,
+        bool isDefault)
     {
         if (userId == Guid.Empty)
         {
@@ -54,7 +78,27 @@ public sealed class MasterCv
             throw new ArgumentException("CV content is required.", nameof(content));
         }
 
-        return new MasterCv(userId, name.Trim(), content.Trim());
+        if (originalPdf is { Length: 0 })
+        {
+            throw new ArgumentException("The original PDF cannot be empty.", nameof(originalPdf));
+        }
+
+        if (originalPdf is not null && string.IsNullOrWhiteSpace(originalFileName))
+        {
+            throw new ArgumentException(
+                "The original filename is required when a PDF is stored.",
+                nameof(originalFileName));
+        }
+
+        return new MasterCv(
+            userId,
+            name.Trim(),
+            content.Trim(),
+            originalPdf,
+            string.IsNullOrWhiteSpace(originalFileName)
+                ? null
+                : originalFileName.Trim(),
+            isDefault);
     }
 
     public void Update(string name, string content)
@@ -71,6 +115,29 @@ public sealed class MasterCv
 
         Name = name.Trim();
         Content = content.Trim();
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void Rename(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("A CV name is required.", nameof(name));
+        }
+
+        var normalizedName = name.Trim();
+        if (normalizedName.Length > 150)
+        {
+            throw new ArgumentException("A CV name cannot exceed 150 characters.", nameof(name));
+        }
+
+        Name = normalizedName;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void SetDefault(bool isDefault)
+    {
+        IsDefault = isDefault;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 }

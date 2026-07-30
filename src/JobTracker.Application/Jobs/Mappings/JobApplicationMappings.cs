@@ -22,5 +22,7 @@ internal static class JobApplicationMappings
             jobApplication.UpdatedAt,
             tailoredCv?.AtsMatchScore,
             tailoredCv?.Id,
-            tailoredCv?.MissingKeywords ?? []);
+            tailoredCv?.MissingKeywords ?? [],
+            jobApplication.CategoryId,
+            jobApplication.Category?.Name);
 }

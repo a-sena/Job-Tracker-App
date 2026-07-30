@@ -15,4 +15,6 @@ public sealed record JobApplicationDto(
     DateTimeOffset UpdatedAt,
     decimal? AtsMatchScore,
     Guid? TailoredCvId,
-    IReadOnlyList<string> MissingKeywords);
+    IReadOnlyList<string> MissingKeywords,
+    Guid? CategoryId,
+    string? CategoryName);

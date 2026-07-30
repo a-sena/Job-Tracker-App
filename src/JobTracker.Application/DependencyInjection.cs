@@ -1,4 +1,5 @@
 using JobTracker.Application.Cvs;
+using JobTracker.Application.ApplicationWorkflow;
 using JobTracker.Application.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,6 +11,8 @@ public static class DependencyInjection
     {
         services.AddScoped<IJobApplicationService, JobApplicationService>();
         services.AddScoped<ICvService, CvService>();
+        services.AddScoped<ISavedCvService, SavedCvService>();
+        services.AddScoped<IApplicationWorkflowService, ApplicationWorkflowService>();
         return services;
     }
 }

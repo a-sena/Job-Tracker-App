@@ -4,7 +4,9 @@ namespace JobTracker.Application.Abstractions.Persistence;
 
 public interface IJobApplicationRepository
 {
-    Task<IReadOnlyList<JobApplication>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<JobApplication>> GetAllByUserIdAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
 
     Task<JobApplication?> GetByIdAsync(
         Guid id,

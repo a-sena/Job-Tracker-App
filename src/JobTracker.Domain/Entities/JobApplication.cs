@@ -48,6 +48,8 @@ public sealed class JobApplication
 
     public string? Location { get; private set; }
 
+    public Guid? CategoryId { get; private set; }
+
     public JobApplicationStatus Status { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
@@ -55,6 +57,8 @@ public sealed class JobApplication
     public DateTimeOffset UpdatedAt { get; private set; }
 
     public ICollection<TailoredCv> TailoredCvs { get; } = new List<TailoredCv>();
+
+    public ApplicationCategory? Category { get; private set; }
 
     public static JobApplication Create(
         Guid userId,
@@ -86,6 +90,31 @@ public sealed class JobApplication
         }
 
         Status = status;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void AssignCategory(Guid categoryId)
+    {
+        if (categoryId == Guid.Empty)
+        {
+            throw new ArgumentException("A category identifier is required.", nameof(categoryId));
+        }
+
+        CategoryId = categoryId;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void AssignCategory(ApplicationCategory category)
+    {
+        ArgumentNullException.ThrowIfNull(category);
+        if (category.UserId != UserId)
+        {
+            throw new InvalidOperationException(
+                "A job application and its category must belong to the same user.");
+        }
+
+        Category = category;
+        CategoryId = category.Id;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 

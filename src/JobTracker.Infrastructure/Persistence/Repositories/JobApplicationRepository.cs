@@ -7,10 +7,13 @@ namespace JobTracker.Infrastructure.Persistence.Repositories;
 internal sealed class JobApplicationRepository(JobTrackerDbContext dbContext)
     : IJobApplicationRepository
 {
-    public async Task<IReadOnlyList<JobApplication>> GetAllAsync(
+    public async Task<IReadOnlyList<JobApplication>> GetAllByUserIdAsync(
+        Guid userId,
         CancellationToken cancellationToken = default) =>
         await dbContext.JobApplications
             .AsNoTracking()
+            .Include(jobApplication => jobApplication.Category)
+            .Where(jobApplication => jobApplication.UserId == userId)
             .OrderByDescending(jobApplication => jobApplication.UpdatedAt)
             .ToListAsync(cancellationToken);
 
@@ -20,6 +23,7 @@ internal sealed class JobApplicationRepository(JobTrackerDbContext dbContext)
         CancellationToken cancellationToken = default)
     {
         IQueryable<JobApplication> query = dbContext.JobApplications;
+        query = query.Include(jobApplication => jobApplication.Category);
 
         if (!asTracking)
         {

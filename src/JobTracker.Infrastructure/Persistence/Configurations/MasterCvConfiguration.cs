@@ -30,6 +30,19 @@ internal sealed class MasterCvConfiguration : IEntityTypeConfiguration<MasterCv>
             .HasColumnType("text")
             .IsRequired();
 
+        builder.Property(masterCv => masterCv.OriginalPdf)
+            .HasColumnName("original_pdf")
+            .HasColumnType("bytea");
+
+        builder.Property(masterCv => masterCv.OriginalFileName)
+            .HasColumnName("original_file_name")
+            .HasMaxLength(255);
+
+        builder.Property(masterCv => masterCv.IsDefault)
+            .HasColumnName("is_default")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         builder.Property(masterCv => masterCv.CreatedAt)
             .HasColumnName("created_at")
             .HasColumnType("timestamp with time zone")
@@ -40,8 +53,12 @@ internal sealed class MasterCvConfiguration : IEntityTypeConfiguration<MasterCv>
             .HasColumnType("timestamp with time zone")
             .IsRequired();
 
-        builder.HasIndex(masterCv => new { masterCv.UserId, masterCv.Name })
+        builder.HasIndex(masterCv => masterCv.UserId)
+            .HasDatabaseName("ix_master_cvs_user_id");
+
+        builder.HasIndex(masterCv => masterCv.UserId)
             .IsUnique()
-            .HasDatabaseName("ux_master_cvs_user_id_name");
+            .HasFilter("is_default")
+            .HasDatabaseName("ux_master_cvs_user_default");
     }
 }

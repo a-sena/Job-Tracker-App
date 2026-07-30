@@ -21,6 +21,7 @@ export interface JobApplication {
   id: string;
   title: string;
   company: string;
+  categoryName: string | null;
   appliedDate: string;
   atsMatchScore: number | null;
   missingKeywords: string[];
@@ -631,6 +632,14 @@ export function JobKanbanBoard({
                                     {atsBadge.label}
                                   </span>
                                 </div>
+
+                                {job.categoryName ? (
+                                  <div className="mt-3">
+                                    <span className="inline-flex max-w-full items-center rounded-full border border-[#172033] bg-[#eef2ff] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#3157d5]">
+                                      <span className="truncate">{job.categoryName}</span>
+                                    </span>
+                                  </div>
+                                ) : null}
 
                                 {job.missingKeywords.length > 0 ? (
                                   <p

@@ -12,6 +12,10 @@ public sealed class JobTrackerDbContext(DbContextOptions<JobTrackerDbContext> op
 
     public DbSet<TailoredCv> TailoredCvs => Set<TailoredCv>();
 
+    public DbSet<ApplicationDraft> ApplicationDrafts => Set<ApplicationDraft>();
+
+    public DbSet<ApplicationCategory> ApplicationCategories => Set<ApplicationCategory>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

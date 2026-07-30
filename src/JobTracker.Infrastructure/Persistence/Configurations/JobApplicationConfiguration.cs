@@ -48,6 +48,9 @@ internal sealed class JobApplicationConfiguration : IEntityTypeConfiguration<Job
             .HasColumnName("location")
             .HasMaxLength(200);
 
+        builder.Property(jobApplication => jobApplication.CategoryId)
+            .HasColumnName("category_id");
+
         builder.Property(jobApplication => jobApplication.Status)
             .HasColumnName("status")
             .HasConversion<string>()
@@ -69,5 +72,13 @@ internal sealed class JobApplicationConfiguration : IEntityTypeConfiguration<Job
 
         builder.HasIndex(jobApplication => jobApplication.UpdatedAt)
             .HasDatabaseName("ix_job_applications_updated_at");
+
+        builder.HasOne(jobApplication => jobApplication.Category)
+            .WithMany(category => category.JobApplications)
+            .HasForeignKey(jobApplication => jobApplication.CategoryId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasIndex(jobApplication => jobApplication.CategoryId)
+            .HasDatabaseName("ix_job_applications_category_id");
     }
 }

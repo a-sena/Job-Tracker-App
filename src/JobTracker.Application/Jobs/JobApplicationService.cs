@@ -10,9 +10,17 @@ internal sealed class JobApplicationService(
     ITailoredCvRepository tailoredCvRepository) : IJobApplicationService
 {
     public async Task<IReadOnlyList<JobApplicationDto>> GetAllAsync(
+        Guid userId,
         CancellationToken cancellationToken = default)
     {
-        var jobApplications = await repository.GetAllAsync(cancellationToken);
+        if (userId == Guid.Empty)
+        {
+            throw new ArgumentException("A user identifier is required.", nameof(userId));
+        }
+
+        var jobApplications = await repository.GetAllByUserIdAsync(
+            userId,
+            cancellationToken);
         var summaries = await tailoredCvRepository.GetLatestSummariesAsync(
             jobApplications.Select(jobApplication => jobApplication.Id).ToArray(),
             cancellationToken);

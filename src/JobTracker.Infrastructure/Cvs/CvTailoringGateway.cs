@@ -74,6 +74,18 @@ internal sealed class CvTailoringGateway(HttpClient httpClient) : ICvTailoringGa
                     502);
             }
 
+            if (package.TailoredCv is null ||
+                package.MatchedKeywords is null ||
+                package.MissingKeywords is null ||
+                string.IsNullOrWhiteSpace(package.PdfBase64) ||
+                string.IsNullOrWhiteSpace(package.FileName) ||
+                package.AtsMatchScore is < 0 or > 100)
+            {
+                throw new CvWorkflowException(
+                    "The AI service returned an incomplete tailoring response.",
+                    502);
+            }
+
             byte[] pdfContent;
             try
             {
@@ -87,13 +99,29 @@ internal sealed class CvTailoringGateway(HttpClient httpClient) : ICvTailoringGa
                     exception);
             }
 
+            if (!IsPdf(pdfContent))
+            {
+                throw new CvWorkflowException(
+                    "The AI service returned an invalid PDF.",
+                    502);
+            }
+
+            var fileName = Path.GetFileName(package.FileName);
+            if (!string.Equals(fileName, package.FileName, StringComparison.Ordinal) ||
+                !fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new CvWorkflowException(
+                    "The AI service returned an unsafe PDF filename.",
+                    502);
+            }
+
             return new GeneratedTailoredCvPackage(
                 package.TailoredCv,
                 package.AtsMatchScore,
                 package.MatchedKeywords,
                 package.MissingKeywords,
                 pdfContent,
-                package.FileName);
+                fileName);
         }
     }
 
@@ -108,4 +136,16 @@ internal sealed class CvTailoringGateway(HttpClient httpClient) : ICvTailoringGa
         IReadOnlyList<string> MissingKeywords,
         string PdfBase64,
         string FileName);
+
+    private static bool IsPdf(byte[] content) =>
+        content is
+        [
+            (byte)'%',
+            (byte)'P',
+            (byte)'D',
+            (byte)'F',
+            (byte)'-',
+            ..
+        ] &&
+        content.Length <= 10_000_000;
 }

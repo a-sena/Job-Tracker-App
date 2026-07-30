@@ -44,14 +44,21 @@ public sealed class JobsController(
     }
 
     /// <summary>
-    /// Returns all tracked job applications, most recently updated first.
+    /// Returns the current user's tracked applications, most recently updated first.
     /// </summary>
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<JobApplicationDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<JobApplicationDto>>> GetAll(
+        [FromQuery] Guid userId,
         CancellationToken cancellationToken)
     {
-        var jobs = await jobApplicationService.GetAllAsync(cancellationToken);
+        if (userId == Guid.Empty)
+        {
+            ModelState.AddModelError(nameof(userId), "A user identifier is required.");
+            return ValidationProblem(ModelState);
+        }
+
+        var jobs = await jobApplicationService.GetAllAsync(userId, cancellationToken);
         return Ok(jobs);
     }
 

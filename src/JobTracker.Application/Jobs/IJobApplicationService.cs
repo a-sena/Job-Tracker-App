@@ -4,7 +4,9 @@ namespace JobTracker.Application.Jobs;
 
 public interface IJobApplicationService
 {
-    Task<IReadOnlyList<JobApplicationDto>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<JobApplicationDto>> GetAllAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
 
     Task<JobApplicationDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 

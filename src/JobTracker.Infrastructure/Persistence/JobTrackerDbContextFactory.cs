@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Npgsql;
 
 namespace JobTracker.Infrastructure.Persistence;
 
@@ -22,8 +23,11 @@ public sealed class JobTrackerDbContextFactory
                 + "variable before running EF Core migration commands.");
         }
 
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+        dataSourceBuilder.EnableDynamicJson([typeof(string[])]);
+
         var options = new DbContextOptionsBuilder<JobTrackerDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(dataSourceBuilder.Build())
             .Options;
 
         return new JobTrackerDbContext(options);
