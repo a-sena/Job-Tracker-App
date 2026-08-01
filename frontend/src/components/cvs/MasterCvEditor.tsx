@@ -18,8 +18,26 @@ export interface Education {
   details: string[];
 }
 
+export interface Project {
+  name: string;
+  role: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  url: string | null;
+  technologies: string[];
+  bulletPoints: string[];
+}
+
+export interface Course {
+  name: string;
+  provider: string | null;
+  completedDate: string | null;
+  details: string[];
+}
+
 export interface MasterCvContent {
   fullName: string;
+  headline: string | null;
   professionalSummary: string;
   email: string | null;
   phone: string | null;
@@ -28,8 +46,10 @@ export interface MasterCvContent {
   website: string | null;
   skills: string[];
   workExperience: WorkExperience[];
+  projects: Project[];
   education: Education[];
   certifications: string[];
+  courses: Course[];
   languages: string[];
 }
 
@@ -64,6 +84,7 @@ interface ImportedMasterCv {
 
 const EMPTY_CONTENT: MasterCvContent = {
   fullName: "",
+  headline: null,
   professionalSummary: "",
   email: null,
   phone: null,
@@ -72,8 +93,10 @@ const EMPTY_CONTENT: MasterCvContent = {
   website: null,
   skills: [],
   workExperience: [],
+  projects: [],
   education: [],
   certifications: [],
+  courses: [],
   languages: [],
 };
 
@@ -92,6 +115,23 @@ const EMPTY_EDUCATION: Education = {
   startDate: null,
   endDate: null,
   location: null,
+  details: [],
+};
+
+const EMPTY_PROJECT: Project = {
+  name: "",
+  role: null,
+  startDate: null,
+  endDate: null,
+  url: null,
+  technologies: [],
+  bulletPoints: [],
+};
+
+const EMPTY_COURSE: Course = {
+  name: "",
+  provider: null,
+  completedDate: null,
   details: [],
 };
 
@@ -135,10 +175,12 @@ function normalizeImportedContent(value: unknown): MasterCvContent {
     workExperience: Array.isArray(content.workExperience)
       ? content.workExperience
       : [],
+    projects: Array.isArray(content.projects) ? content.projects : [],
     education: Array.isArray(content.education) ? content.education : [],
     certifications: Array.isArray(content.certifications)
       ? content.certifications
       : [],
+    courses: Array.isArray(content.courses) ? content.courses : [],
     languages: Array.isArray(content.languages) ? content.languages : [],
   };
 }
@@ -208,6 +250,24 @@ export default function MasterCvEditor({
       "education",
       content.education.map((education, educationIndex) =>
         educationIndex === index ? { ...education, ...patch } : education,
+      ),
+    );
+  }
+
+  function updateProject(index: number, patch: Partial<Project>): void {
+    updateContent(
+      "projects",
+      content.projects.map((project, projectIndex) =>
+        projectIndex === index ? { ...project, ...patch } : project,
+      ),
+    );
+  }
+
+  function updateCourse(index: number, patch: Partial<Course>): void {
+    updateContent(
+      "courses",
+      content.courses.map((course, courseIndex) =>
+        courseIndex === index ? { ...course, ...patch } : course,
       ),
     );
   }
@@ -447,6 +507,17 @@ export default function MasterCvEditor({
               className={inputClassName}
             />
           </FieldLabel>
+          <FieldLabel label="Professional headline">
+            <input
+              maxLength={200}
+              value={content.headline ?? ""}
+              onChange={(event) =>
+                updateContent("headline", optional(event.target.value))
+              }
+              placeholder="e.g. Product Designer (UX/UI)"
+              className={inputClassName}
+            />
+          </FieldLabel>
           <FieldLabel label="Email">
             <input
               type="email"
@@ -528,6 +599,91 @@ export default function MasterCvEditor({
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-black uppercase tracking-[0.06em] text-[#172033]">
               <span className="mr-2 text-[#3157d5]">02</span>
+              Selected projects
+            </h3>
+            <button
+              type="button"
+              onClick={() =>
+                updateContent("projects", [
+                  ...content.projects,
+                  { ...EMPTY_PROJECT, technologies: [], bulletPoints: [] },
+                ])
+              }
+              className="rounded-md border-2 border-[#172033] bg-white px-3 py-2 text-sm font-bold shadow-[2px_2px_0_#172033]"
+            >
+              Add project
+            </button>
+          </div>
+          <div className="mt-4 grid gap-4">
+            {content.projects.map((project, index) => (
+              <div
+                key={index}
+                className="grid gap-4 rounded-md border-2 border-l-[6px] border-[#172033] border-l-[#3157d5] bg-[#f7f7f4] p-4"
+              >
+                <div className="flex justify-between">
+                  <p className="text-sm font-bold">Project {index + 1}</p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateContent(
+                        "projects",
+                        content.projects.filter((_, itemIndex) => itemIndex !== index),
+                      )
+                    }
+                    className="text-xs font-semibold text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FieldLabel label="Project name">
+                    <input
+                      required
+                      value={project.name}
+                      onChange={(event) => updateProject(index, { name: event.target.value })}
+                      className={inputClassName}
+                    />
+                  </FieldLabel>
+                  <FieldLabel label="Your role">
+                    <input
+                      value={project.role ?? ""}
+                      onChange={(event) => updateProject(index, { role: optional(event.target.value) })}
+                      className={inputClassName}
+                    />
+                  </FieldLabel>
+                  <FieldLabel label="Technologies (comma separated)">
+                    <input
+                      value={project.technologies.join(", ")}
+                      onChange={(event) => updateProject(index, { technologies: splitCommaSeparated(event.target.value) })}
+                      className={inputClassName}
+                    />
+                  </FieldLabel>
+                  <FieldLabel label="Project URL">
+                    <input
+                      type="url"
+                      value={project.url ?? ""}
+                      onChange={(event) => updateProject(index, { url: optional(event.target.value) })}
+                      className={inputClassName}
+                    />
+                  </FieldLabel>
+                </div>
+                <FieldLabel label="Project details (one per line)">
+                  <textarea
+                    rows={4}
+                    value={project.bulletPoints.join("\n")}
+                    onChange={(event) => updateProject(index, { bulletPoints: splitLines(event.target.value) })}
+                    className={textareaClassName}
+                  />
+                </FieldLabel>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-black uppercase tracking-[0.06em] text-[#172033]">
+              <span className="mr-2 text-[#3157d5]">03</span>
               Work experience
             </h3>
             <button
@@ -640,7 +796,7 @@ export default function MasterCvEditor({
         <div>
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-black uppercase tracking-[0.06em] text-[#172033]">
-              <span className="mr-2 text-[#d84d3d]">03</span>
+              <span className="mr-2 text-[#d84d3d]">04</span>
               Education
             </h3>
             <button
@@ -729,6 +885,83 @@ export default function MasterCvEditor({
                     />
                   </FieldLabel>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-black uppercase tracking-[0.06em] text-[#172033]">
+              <span className="mr-2 text-[#3157d5]">05</span>
+              Courses and training
+            </h3>
+            <button
+              type="button"
+              onClick={() =>
+                updateContent("courses", [
+                  ...content.courses,
+                  { ...EMPTY_COURSE, details: [] },
+                ])
+              }
+              className="rounded-md border-2 border-[#172033] bg-white px-3 py-2 text-sm font-bold shadow-[2px_2px_0_#172033]"
+            >
+              Add course
+            </button>
+          </div>
+          <div className="mt-4 grid gap-4">
+            {content.courses.map((course, index) => (
+              <div
+                key={index}
+                className="grid gap-4 rounded-md border-2 border-l-[6px] border-[#172033] border-l-[#ffcc4d] bg-[#f7f7f4] p-4"
+              >
+                <div className="flex justify-between">
+                  <p className="text-sm font-bold">Course {index + 1}</p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateContent(
+                        "courses",
+                        content.courses.filter((_, itemIndex) => itemIndex !== index),
+                      )
+                    }
+                    className="text-xs font-semibold text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <FieldLabel label="Course name">
+                    <input
+                      required
+                      value={course.name}
+                      onChange={(event) => updateCourse(index, { name: event.target.value })}
+                      className={inputClassName}
+                    />
+                  </FieldLabel>
+                  <FieldLabel label="Provider">
+                    <input
+                      value={course.provider ?? ""}
+                      onChange={(event) => updateCourse(index, { provider: optional(event.target.value) })}
+                      className={inputClassName}
+                    />
+                  </FieldLabel>
+                  <FieldLabel label="Completed">
+                    <input
+                      value={course.completedDate ?? ""}
+                      onChange={(event) => updateCourse(index, { completedDate: optional(event.target.value) })}
+                      className={inputClassName}
+                    />
+                  </FieldLabel>
+                </div>
+                <FieldLabel label="Details (one per line)">
+                  <textarea
+                    rows={3}
+                    value={course.details.join("\n")}
+                    onChange={(event) => updateCourse(index, { details: splitLines(event.target.value) })}
+                    className={textareaClassName}
+                  />
+                </FieldLabel>
               </div>
             ))}
           </div>

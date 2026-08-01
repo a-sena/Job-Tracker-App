@@ -48,6 +48,29 @@ interface ApplicationCategory {
   createdAt: string;
 }
 
+interface ComparisonExperience {
+  company: string;
+  jobTitle: string;
+  bulletPoints: string[];
+}
+
+interface ComparisonProject {
+  name: string;
+  bulletPoints: string[];
+}
+
+interface ComparisonCv {
+  professionalSummary: string;
+  workExperience: ComparisonExperience[];
+  projects: ComparisonProject[];
+}
+
+interface TailoredCvComparison {
+  draftId: string;
+  original: ComparisonCv;
+  tailored: ComparisonCv;
+}
+
 interface ExtractedJob {
   jobUrl: string;
   title: string;
@@ -75,6 +98,7 @@ type BusyAction =
   | "source"
   | "review"
   | "tailor"
+  | "comparison"
   | "questions"
   | "log"
   | null;
@@ -388,6 +412,9 @@ export default function ApplicationWorkflow({
   const [notice, setNotice] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showQuestions, setShowQuestions] = useState(false);
+  const [showTailoringComparison, setShowTailoringComparison] = useState(false);
+  const [tailoringComparison, setTailoringComparison] =
+    useState<TailoredCvComparison | null>(null);
   const [showCategories, setShowCategories] = useState(false);
   const [categories, setCategories] = useState<ApplicationCategory[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
@@ -469,6 +496,28 @@ export default function ApplicationWorkflow({
     () => savedCvs.find((cv) => cv.id === selectedCvId),
     [savedCvs, selectedCvId],
   );
+
+  async function openTailoringComparison(): Promise<void> {
+    if (!draft) return;
+    setBusy("comparison");
+    setError(null);
+    try {
+      const comparison = await request<TailoredCvComparison>(
+        apiBaseUrl,
+        `/api/application-workflow/draft/${encodeURIComponent(draft.id)}/tailored-cv/comparison`,
+      );
+      setTailoringComparison(comparison);
+      setShowTailoringComparison(true);
+    } catch (comparisonError) {
+      setError(
+        comparisonError instanceof Error
+          ? comparisonError.message
+          : "The CV changes could not be loaded.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function uploadCv() {
     if (!uploadFile || !uploadName.trim()) {
@@ -1093,6 +1142,14 @@ export default function ApplicationWorkflow({
                 tone="missing"
               />
               <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void openTailoringComparison()}
+                  disabled={busy === "comparison"}
+                  className="col-span-2 rounded-md border-2 border-[#172033] bg-[#ffcc4d] px-2 py-2 text-center text-xs font-black disabled:opacity-60"
+                >
+                  {busy === "comparison" ? "Loading changes…" : "Review changes"}
+                </button>
                 <a
                   href={apiUrl(
                     apiBaseUrl,
@@ -1213,6 +1270,80 @@ export default function ApplicationWorkflow({
           Add application to log
         </button>
       </div>
+
+      {showTailoringComparison && tailoringComparison ? (
+        <Modal
+          title="What the AI changed"
+          onClose={() => setShowTailoringComparison(false)}
+        >
+          <p className="mt-2 text-sm leading-6 text-[#626979]">
+            Facts, employers, projects, tools, and dates stay locked. Only the
+            summary and existing evidence bullets may be rephrased.
+          </p>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <section className="rounded-md border-2 border-[#b8bac0] bg-white p-4">
+              <h3 className="text-xs font-black uppercase tracking-[0.12em] text-[#626979]">
+                Original summary
+              </h3>
+              <p className="mt-2 text-sm leading-6">
+                {tailoringComparison.original.professionalSummary}
+              </p>
+            </section>
+            <section className="rounded-md border-2 border-[#3157d5] bg-[#f3f5ff] p-4">
+              <h3 className="text-xs font-black uppercase tracking-[0.12em] text-[#3157d5]">
+                Tailored summary
+              </h3>
+              <p className="mt-2 text-sm leading-6">
+                {tailoringComparison.tailored.professionalSummary}
+              </p>
+            </section>
+          </div>
+
+          {tailoringComparison.original.workExperience.map((experience, index) => {
+            const tailored = tailoringComparison.tailored.workExperience[index];
+            return (
+              <section key={`${experience.company}-${index}`} className="mt-5">
+                <h3 className="font-black text-[#172033]">
+                  {experience.jobTitle} · {experience.company}
+                </h3>
+                <div className="mt-2 grid gap-3 md:grid-cols-2">
+                  <ul className="list-disc space-y-2 rounded-md border border-[#cfcec9] bg-white p-4 pl-8 text-sm leading-6">
+                    {experience.bulletPoints.map((bullet, bulletIndex) => (
+                      <li key={bulletIndex}>{bullet}</li>
+                    ))}
+                  </ul>
+                  <ul className="list-disc space-y-2 rounded-md border border-[#aab8ee] bg-[#f3f5ff] p-4 pl-8 text-sm leading-6">
+                    {(tailored?.bulletPoints ?? []).map((bullet, bulletIndex) => (
+                      <li key={bulletIndex}>{bullet}</li>
+                    ))}
+                  </ul>
+                </div>
+              </section>
+            );
+          })}
+
+          {tailoringComparison.original.projects.map((project, index) => {
+            const tailored = tailoringComparison.tailored.projects[index];
+            return (
+              <section key={`${project.name}-${index}`} className="mt-5">
+                <h3 className="font-black text-[#172033]">{project.name}</h3>
+                <div className="mt-2 grid gap-3 md:grid-cols-2">
+                  <ul className="list-disc space-y-2 rounded-md border border-[#cfcec9] bg-white p-4 pl-8 text-sm leading-6">
+                    {project.bulletPoints.map((bullet, bulletIndex) => (
+                      <li key={bulletIndex}>{bullet}</li>
+                    ))}
+                  </ul>
+                  <ul className="list-disc space-y-2 rounded-md border border-[#aab8ee] bg-[#f3f5ff] p-4 pl-8 text-sm leading-6">
+                    {(tailored?.bulletPoints ?? []).map((bullet, bulletIndex) => (
+                      <li key={bulletIndex}>{bullet}</li>
+                    ))}
+                  </ul>
+                </div>
+              </section>
+            );
+          })}
+        </Modal>
+      ) : null}
 
       {showQuestions && draft ? (
         <Modal title="First-round interview questions" onClose={() => setShowQuestions(false)}>

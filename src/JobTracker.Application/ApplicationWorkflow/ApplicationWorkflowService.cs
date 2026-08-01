@@ -150,6 +150,30 @@ internal sealed class ApplicationWorkflowService(
             : new DraftPdfDto(draft.TailoredPdf.ToArray(), draft.TailoredPdfFileName);
     }
 
+    public async Task<TailoredCvComparisonDto> GetTailoredComparisonAsync(
+        Guid draftId,
+        CancellationToken cancellationToken = default)
+    {
+        var draft = await draftRepository.GetByIdAsync(
+            draftId,
+            cancellationToken: cancellationToken)
+            ?? throw new ApplicationWorkflowException("The application draft was not found.", 404);
+        if (!draft.MasterCvId.HasValue || string.IsNullOrWhiteSpace(draft.TailoredContent))
+        {
+            throw new ApplicationWorkflowException("Tailor the CV before reviewing changes.", 409);
+        }
+
+        var masterCv = await masterCvRepository.GetByIdAsync(
+            draft.MasterCvId.Value,
+            cancellationToken: cancellationToken)
+            ?? throw new ApplicationWorkflowException("The source CV was not found.", 404);
+
+        return new TailoredCvComparisonDto(
+            draft.Id,
+            DeserializeContent(masterCv.Content),
+            DeserializeContent(draft.TailoredContent));
+    }
+
     public async Task<ApplicationDraftDto> GenerateInterviewQuestionsAsync(
         Guid draftId,
         CancellationToken cancellationToken = default)
@@ -380,6 +404,7 @@ internal sealed class ApplicationWorkflowService(
         MasterCvContentDto tailored)
     {
         if (!SameText(source.FullName, tailored.FullName) ||
+            !SameText(source.Headline, tailored.Headline) ||
             !SameText(source.Email, tailored.Email) ||
             !SameText(source.Phone, tailored.Phone) ||
             !SameText(source.Location, tailored.Location) ||
@@ -425,6 +450,32 @@ internal sealed class ApplicationWorkflowService(
             }
         }
 
+        if (tailored.Projects.Count != source.Projects.Count)
+        {
+            throw new ApplicationWorkflowException(
+                "The generated CV changed the factual project history. Nothing was saved.",
+                502);
+        }
+
+        for (var index = 0; index < source.Projects.Count; index++)
+        {
+            var original = source.Projects[index];
+            var generated = tailored.Projects[index];
+            if (!SameText(original.Name, generated.Name) ||
+                !SameText(original.Role, generated.Role) ||
+                !SameText(original.StartDate, generated.StartDate) ||
+                !SameText(original.EndDate, generated.EndDate) ||
+                !SameText(original.Url, generated.Url) ||
+                !SameValues(original.Technologies, generated.Technologies) ||
+                generated.BulletPoints.Count != original.BulletPoints.Count ||
+                generated.BulletPoints.Any(string.IsNullOrWhiteSpace))
+            {
+                throw new ApplicationWorkflowException(
+                    "The generated CV changed factual project information. Nothing was saved.",
+                    502);
+            }
+        }
+
         if (tailored.Education.Count != source.Education.Count)
         {
             throw new ApplicationWorkflowException(
@@ -447,6 +498,30 @@ internal sealed class ApplicationWorkflowService(
             {
                 throw new ApplicationWorkflowException(
                     "The generated CV changed factual education history. Nothing was saved.",
+                    502);
+            }
+        }
+
+        if (tailored.Courses.Count != source.Courses.Count)
+        {
+            throw new ApplicationWorkflowException(
+                "The generated CV changed factual course information. Nothing was saved.",
+                502);
+        }
+
+        for (var index = 0; index < source.Courses.Count; index++)
+        {
+            var original = source.Courses[index];
+            var generated = tailored.Courses[index];
+            if (!SameText(original.Name, generated.Name) ||
+                !SameText(original.Provider, generated.Provider) ||
+                !SameText(original.CompletedDate, generated.CompletedDate) ||
+                !original.Details.SequenceEqual(
+                    generated.Details,
+                    StringComparer.OrdinalIgnoreCase))
+            {
+                throw new ApplicationWorkflowException(
+                    "The generated CV changed factual course information. Nothing was saved.",
                     502);
             }
         }

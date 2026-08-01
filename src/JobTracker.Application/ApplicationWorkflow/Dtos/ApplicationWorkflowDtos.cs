@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using JobTracker.Application.Cvs.Dtos;
 
 namespace JobTracker.Application.ApplicationWorkflow.Dtos;
 
@@ -61,3 +62,8 @@ public sealed record ApplicationCategoryDto(
     DateTimeOffset CreatedAt);
 
 public sealed record DraftPdfDto(byte[] Content, string FileName);
+
+public sealed record TailoredCvComparisonDto(
+    Guid DraftId,
+    MasterCvContentDto Original,
+    MasterCvContentDto Tailored);

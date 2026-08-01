@@ -30,6 +30,10 @@ public interface IApplicationWorkflowService
         Guid draftId,
         CancellationToken cancellationToken = default);
 
+    Task<TailoredCvComparisonDto> GetTailoredComparisonAsync(
+        Guid draftId,
+        CancellationToken cancellationToken = default);
+
     Task<ApplicationDraftDto> GenerateInterviewQuestionsAsync(
         Guid draftId,
         CancellationToken cancellationToken = default);

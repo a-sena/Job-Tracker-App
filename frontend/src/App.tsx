@@ -188,31 +188,85 @@ export default function App(): JSX.Element {
     <div className="min-h-screen bg-[#f3f0e8] text-[#172033]">
       <header className="sticky top-0 z-40 border-b-2 border-[#172033] bg-white">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <a href="#application-studio" className="flex items-center gap-3">
+          <a href="#application-studio" className="flex items-center gap-2 sm:gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-[#172033] bg-[#3157d5] text-base font-black text-white shadow-[3px_3px_0_#ffcc4d]">
               J
             </span>
             <span>
               <span className="block text-lg font-black tracking-tight">JobFlow</span>
-              <span className="block text-xs font-medium text-[#626979]">
+              <span className="hidden text-xs font-medium text-[#626979] sm:block">
                 Application workspace
               </span>
             </span>
           </a>
-          <nav aria-label="Main navigation" className="flex items-center gap-2">
-            <a
-              href="#application-studio"
-              className="rounded-md px-3 py-2 text-xs font-black text-[#3157d5] hover:bg-[#eef2ff]"
+          <div className="flex items-center gap-2 sm:gap-3">
+            <nav
+              aria-label="Main navigation"
+              className="flex items-center rounded-xl border border-[#d7d3c9] bg-[#f3f0e8] p-1"
             >
-              Prepare
-            </a>
-            <a
-              href="#application-log"
-              className="rounded-md border-2 border-[#172033] bg-[#ffcc4d] px-3 py-2 text-xs font-black shadow-[2px_2px_0_#172033]"
+              <a
+                href="#application-studio"
+                aria-label="Prepare an application"
+                className="group flex h-9 items-center gap-2 rounded-lg bg-white px-2.5 text-xs font-bold text-[#172033] shadow-sm transition hover:text-[#3157d5] sm:px-3"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  className="h-4 w-4 text-[#3157d5]"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 20h4l10.5-10.5a2.83 2.83 0 0 0-4-4L4 16v4Z" />
+                  <path strokeLinecap="round" d="m13.5 6.5 4 4" />
+                </svg>
+                <span className="hidden sm:inline">Prepare</span>
+              </a>
+              <a
+                href="#application-log"
+                aria-label="Open application log"
+                className="group flex h-9 items-center gap-2 rounded-lg px-2.5 text-xs font-bold text-[#555d6d] transition hover:bg-white/80 hover:text-[#172033] sm:px-3"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  className="h-4 w-4 transition group-hover:text-[#c84736]"
+                >
+                  <rect x="4" y="5" width="16" height="15" rx="2" />
+                  <path strokeLinecap="round" d="M8 3v4M16 3v4M8 11h8M8 15h5" />
+                </svg>
+                <span className="hidden sm:inline">Applications</span>
+                {jobs.length > 0 ? (
+                  <span className="hidden min-w-5 rounded-full bg-[#172033] px-1.5 py-0.5 text-center text-[9px] font-black text-white md:inline-block">
+                    {jobs.length}
+                  </span>
+                ) : null}
+              </a>
+            </nav>
+
+            <span aria-hidden="true" className="hidden h-8 w-px bg-[#d7d3c9] sm:block" />
+
+            <div
+              className="flex items-center gap-2 rounded-xl px-1 py-1 sm:pr-2"
+              aria-label="Current user: Guest, local workspace"
+              title="User accounts will be connected here"
             >
-              Application log
-            </a>
-          </nav>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ff7058] text-xs font-black text-[#172033] ring-2 ring-white ring-offset-1 ring-offset-[#d7d3c9]">
+                G
+              </span>
+              <span className="hidden text-left md:block">
+                <span className="block text-xs font-black leading-4 text-[#172033]">
+                  Guest
+                </span>
+                <span className="block text-[10px] font-medium leading-3 text-[#737988]">
+                  Local workspace
+                </span>
+              </span>
+            </div>
+          </div>
         </div>
       </header>
 

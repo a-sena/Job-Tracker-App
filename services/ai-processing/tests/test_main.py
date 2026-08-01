@@ -244,6 +244,94 @@ def test_html_template_autoescapes_candidate_content() -> None:
     assert "&lt;script&gt;" in html
 
 
+def test_projects_and_courses_are_preserved_in_classic_norwegian_cv() -> None:
+    request_data = make_request().model_dump(by_alias=True)
+    request_data["masterCv"].update(
+        {
+            "headline": "Produktdesigner (UX/UI)",
+            "professional_summary": (
+                "Produktdesigner med erfaring fra brukerinnsikt, prototyping og "
+                "samarbeid med utviklingsteam."
+            ),
+            "projects": [
+                {
+                    "name": "SiO redesign",
+                    "role": "UX-designer",
+                    "start_date": "2024",
+                    "end_date": "2024",
+                    "url": "https://example.no/sio",
+                    "technologies": ["Figma"],
+                    "bullet_points": ["Gjennomførte brukertesting og prototyping."],
+                }
+            ],
+            "courses": [
+                {
+                    "name": "Universell utforming",
+                    "provider": "OsloMet",
+                    "completed_date": "2024",
+                    "details": [],
+                }
+            ],
+        }
+    )
+    request = GenerateTailoredCvRequest.model_validate(request_data)
+    tailoring_data = make_tailoring().model_dump()
+    tailoring_data["professional_summary"] = request.master_cv.professional_summary
+    tailoring_data["project_rewrites"] = [
+        {
+            "project_index": 0,
+            "bullet_points": [
+                {
+                    "source_bullet_index": 0,
+                    "text": "Planla brukertesting og utviklet prototyper i Figma.",
+                }
+            ],
+        }
+    ]
+    tailoring = TailoringResult.model_validate(tailoring_data)
+
+    document = validate_and_merge_tailoring(request.master_cv, tailoring)
+    html = render_cv_html(document)
+
+    assert document.projects[0].name == "SiO redesign"
+    assert document.projects[0].technologies == ["Figma"]
+    assert document.courses[0].name == "Universell utforming"
+    assert "UTVALGTE PROSJEKTER" in html.upper()
+    assert "KURS OG OPPLÆRING" in html.upper()
+    assert "#2563eb" not in html
+    assert "display: flex" not in html
+    pdf = HTML(string=html).write_pdf()
+    extracted_text, _ = extract_text_from_pdf(
+        pdf,
+        max_pages=5,
+        max_text_characters=10_000,
+    )
+    assert "SiO redesign" in extracted_text
+    assert "Universell utforming" in extracted_text
+
+
+@pytest.mark.asyncio
+async def test_unverified_matched_keyword_is_moved_to_missing() -> None:
+    candidate = {
+        "atsMatchScore": 99,
+        "matchedKeywords": ["C#", "Kubernetes"],
+        "missingKeywords": [],
+        "keywordEvidence": [],
+        "explanation": "Only facts in the source CV may count.",
+    }
+    client = FakeOpenAiClient(json.dumps(candidate))
+
+    result = await review_cv_with_openai(  # type: ignore[arg-type]
+        make_request(),
+        client,
+        Settings(openai_api_key="test-key"),
+    )
+
+    assert result.matched_keywords == ["C#"]
+    assert result.missing_keywords == ["Kubernetes"]
+    assert result.ats_match_score < 99
+
+
 class FakeCompletions:
     def __init__(self, content: str | list[str]) -> None:
         self.contents = [content] if isinstance(content, str) else content
@@ -338,8 +426,8 @@ async def test_ats_review_uses_configured_model_json_mode_and_fixed_contract() -
     assert arguments["model"] == "gpt-4o-mini"
     assert arguments["response_format"] == {"type": "json_object"}
     assert arguments["temperature"] == 0
-    assert result.ats_match_score == 58
-    assert result.model_dump(by_alias=True)["atsMatchScore"] == 58
+    assert result.ats_match_score == 64
+    assert result.model_dump(by_alias=True)["atsMatchScore"] == 64
 
 
 @pytest.mark.asyncio
@@ -465,7 +553,7 @@ async def test_openai_call_uses_requested_model_and_json_mode() -> None:
     assert arguments["model"] == "gpt-4o-mini"
     assert arguments["response_format"] == {"type": "json_object"}
     assert arguments["temperature"] == 0.1
-    assert result.ats_match_score == 72
+    assert result.ats_match_score == 76
 
 
 @pytest.mark.asyncio
@@ -492,7 +580,7 @@ async def test_low_ats_result_gets_grounded_refinement() -> None:
         settings,
     )
 
-    assert result.ats_match_score == 81
+    assert result.ats_match_score == 76
     assert len(client.chat.completions.call_history) == 2
     second_prompt = client.chat.completions.call_history[1]["messages"][1]["content"]
     assert "<first_draft_json>" in second_prompt
@@ -525,7 +613,7 @@ async def test_package_contains_metadata_document_and_pdf(
         settings,
     )
 
-    assert package.ats_match_score == 72
+    assert package.ats_match_score == 76
     assert package.tailored_cv.full_name == "Ada Lovelace"
     assert package.missing_keywords == ["Kubernetes", "distributed systems"]
     assert base64.b64decode(package.pdf_base64) == b"%PDF-test"

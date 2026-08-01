@@ -81,6 +81,22 @@ public sealed class ApplicationWorkflowController(
             : File(pdf.Content, "application/pdf", enableRangeProcessing: true);
     }
 
+    [HttpGet("draft/{id:guid}/tailored-cv/comparison")]
+    [ProducesResponseType<TailoredCvComparisonDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<TailoredCvComparisonDto>> GetTailoredCvComparison(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await workflowService.GetTailoredComparisonAsync(id, cancellationToken));
+        }
+        catch (ApplicationWorkflowException exception)
+        {
+            return WorkflowProblem(exception);
+        }
+    }
+
     [HttpPost("draft/{id:guid}/interview-questions")]
     public Task<ActionResult<ApplicationDraftDto>> GenerateInterviewQuestions(
         Guid id,
