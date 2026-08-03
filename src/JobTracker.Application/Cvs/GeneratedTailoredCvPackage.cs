@@ -9,3 +9,7 @@ public sealed record GeneratedTailoredCvPackage(
     IReadOnlyList<string> MissingKeywords,
     byte[] PdfContent,
     string PdfFileName);
+
+public sealed record CvKeywordBaseline(
+    IReadOnlyList<string> MatchedKeywords,
+    IReadOnlyList<string> MissingKeywords);

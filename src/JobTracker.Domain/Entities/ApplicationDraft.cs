@@ -30,6 +30,7 @@ public sealed class ApplicationDraft
     public string[] OriginalMatchedKeywords { get; private set; } = [];
     public string[] OriginalMissingKeywords { get; private set; } = [];
     public string? AtsExplanation { get; private set; }
+    public string? AtsReviewDetails { get; private set; }
     public string? TailoredContent { get; private set; }
     public decimal? TailoredAtsScore { get; private set; }
     public string[] TailoredMatchedKeywords { get; private set; } = [];
@@ -92,13 +93,15 @@ public sealed class ApplicationDraft
         decimal score,
         IReadOnlyCollection<string> matchedKeywords,
         IReadOnlyCollection<string> missingKeywords,
-        string explanation)
+        string explanation,
+        string reviewDetails)
     {
         EnsureSource();
         OriginalAtsScore = ValidateScore(score);
         OriginalMatchedKeywords = Normalize(matchedKeywords);
         OriginalMissingKeywords = Normalize(missingKeywords);
         AtsExplanation = Required(explanation, nameof(explanation));
+        AtsReviewDetails = Required(reviewDetails, nameof(reviewDetails));
         TailoredContent = null;
         TailoredAtsScore = null;
         TailoredMatchedKeywords = [];
@@ -190,6 +193,7 @@ public sealed class ApplicationDraft
         OriginalMatchedKeywords = [];
         OriginalMissingKeywords = [];
         AtsExplanation = null;
+        AtsReviewDetails = null;
         TailoredContent = null;
         TailoredAtsScore = null;
         TailoredMatchedKeywords = [];

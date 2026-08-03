@@ -16,6 +16,7 @@ internal sealed class CvTailoringGateway(HttpClient httpClient) : ICvTailoringGa
     public async Task<GeneratedTailoredCvPackage> GenerateAsync(
         MasterCvContentDto masterCv,
         string jobDescription,
+        CvKeywordBaseline? keywordBaseline,
         CancellationToken cancellationToken = default)
     {
         HttpResponseMessage response;
@@ -24,7 +25,7 @@ internal sealed class CvTailoringGateway(HttpClient httpClient) : ICvTailoringGa
         {
             response = await httpClient.PostAsJsonAsync(
                 "api/tailored-cv-package",
-                new TailoringRequest(masterCv, jobDescription),
+                new TailoringRequest(masterCv, jobDescription, keywordBaseline),
                 JsonOptions,
                 cancellationToken);
         }
@@ -127,7 +128,8 @@ internal sealed class CvTailoringGateway(HttpClient httpClient) : ICvTailoringGa
 
     private sealed record TailoringRequest(
         [property: JsonPropertyName("MasterCV")] MasterCvContentDto MasterCv,
-        [property: JsonPropertyName("JobDescription")] string JobDescription);
+        [property: JsonPropertyName("JobDescription")] string JobDescription,
+        [property: JsonPropertyName("keywordBaseline")] CvKeywordBaseline? KeywordBaseline);
 
     private sealed record TailoredPackageResponse(
         MasterCvContentDto TailoredCv,

@@ -38,6 +38,8 @@ internal sealed class ApplicationDraftConfiguration
             .HasColumnName("original_missing_keywords").HasColumnType("jsonb").IsRequired();
         builder.Property(draft => draft.AtsExplanation)
             .HasColumnName("ats_explanation").HasColumnType("text");
+        builder.Property(draft => draft.AtsReviewDetails)
+            .HasColumnName("ats_review_details").HasColumnType("jsonb");
         builder.Property(draft => draft.TailoredContent)
             .HasColumnName("tailored_content").HasColumnType("jsonb");
         builder.Property(draft => draft.TailoredAtsScore)

@@ -36,6 +36,7 @@ from pydantic import (
     SecretStr,
     ValidationError,
     field_validator,
+    model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pypdf import PdfReader
@@ -171,6 +172,44 @@ class ExtractedMasterCv(StrictModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class KeywordBaseline(StrictModel):
+    """Reviewed ATS requirements reused unchanged for before/after scoring."""
+
+    matched_keywords: list[str] = Field(
+        validation_alias=AliasChoices("matchedKeywords", "matched_keywords"),
+        serialization_alias="matchedKeywords",
+        max_length=100,
+    )
+    missing_keywords: list[str] = Field(
+        validation_alias=AliasChoices("missingKeywords", "missing_keywords"),
+        serialization_alias="missingKeywords",
+        max_length=100,
+    )
+
+    @field_validator("matched_keywords", "missing_keywords")
+    @classmethod
+    def normalize_keywords(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            keyword = value.strip()
+            key = keyword.casefold()
+            if keyword and key not in seen:
+                normalized.append(keyword)
+                seen.add(key)
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_partition(self) -> KeywordBaseline:
+        matched = {value.casefold() for value in self.matched_keywords}
+        missing = {value.casefold() for value in self.missing_keywords}
+        if matched & missing:
+            raise ValueError("Keyword baseline lists must be mutually exclusive.")
+        if not matched and not missing:
+            raise ValueError("Keyword baseline must contain at least one requirement.")
+        return self
+
+
 class GenerateTailoredCvRequest(StrictModel):
     """Payload accepted by POST /api/generate-tailored-cv."""
 
@@ -183,6 +222,11 @@ class GenerateTailoredCvRequest(StrictModel):
         serialization_alias="jobDescription",
         min_length=20,
         max_length=50_000,
+    )
+    keyword_baseline: KeywordBaseline | None = Field(
+        default=None,
+        validation_alias=AliasChoices("keywordBaseline", "KeywordBaseline"),
+        serialization_alias="keywordBaseline",
     )
 
 
@@ -203,7 +247,11 @@ class ProjectRewrite(StrictModel):
 
 class KeywordEvidence(StrictModel):
     keyword: str = Field(min_length=1, max_length=200)
-    evidence_text: str = Field(min_length=1, max_length=2_000)
+    evidence_text: str = Field(
+        validation_alias=AliasChoices("evidence_text", "evidenceText"),
+        min_length=1,
+        max_length=2_000,
+    )
 
 
 class TailoringResult(StrictModel):
@@ -283,6 +331,51 @@ class TailoredCvPackage(StrictModel):
     file_name: str
 
 
+class AtsScoreComponent(StrictModel):
+    key: str = Field(min_length=1, max_length=50)
+    label: str = Field(min_length=1, max_length=100)
+    score: float = Field(ge=0, le=100)
+    max_score: float = Field(alias="maxScore", gt=0, le=100)
+    explanation: str = Field(min_length=1, max_length=500)
+
+
+class AtsKeywordEvidenceDetail(StrictModel):
+    keyword: str = Field(min_length=1, max_length=200)
+    section: str = Field(min_length=1, max_length=100)
+    evidence_text: str = Field(alias="evidenceText", min_length=1, max_length=2_000)
+
+
+class AtsSectionFeedback(StrictModel):
+    section: str = Field(min_length=1, max_length=100)
+    status: str = Field(pattern="^(strong|needs_attention|not_available)$")
+    findings: list[str] = Field(default_factory=list, max_length=10)
+    recommendations: list[str] = Field(default_factory=list, max_length=10)
+
+
+class AtsReviewDetails(StrictModel):
+    score_breakdown: list[AtsScoreComponent] = Field(
+        alias="scoreBreakdown",
+        min_length=4,
+        max_length=4,
+    )
+    keyword_evidence: list[AtsKeywordEvidenceDetail] = Field(
+        alias="keywordEvidence",
+        default_factory=list,
+        max_length=100,
+    )
+    strengths: list[str] = Field(default_factory=list, max_length=10)
+    priority_actions: list[str] = Field(
+        alias="priorityActions",
+        default_factory=list,
+        max_length=10,
+    )
+    section_feedback: list[AtsSectionFeedback] = Field(
+        alias="sectionFeedback",
+        default_factory=list,
+        max_length=10,
+    )
+
+
 class AtsReview(StrictModel):
     """Truth-grounded ATS assessment shared with the application workflow."""
 
@@ -296,6 +389,7 @@ class AtsReview(StrictModel):
         max_length=100,
     )
     explanation: str = Field(min_length=1, max_length=3_000)
+    details: AtsReviewDetails
 
     @field_validator("matched_keywords", "missing_keywords")
     @classmethod
@@ -808,6 +902,9 @@ NON-NEGOTIABLE GROUNDING RULES:
 9. Do not output company names, job titles, dates, contact details, education,
    certifications, courses, languages, project metadata, or a rewritten skills
    list. The application supplies that immutable source data itself.
+10. When the application supplies a fixed keyword baseline, return those exact
+    matched and missing keyword lists. Never reselect, rename, add, remove, or move
+    a baseline keyword. The baseline was already reviewed against the source CV.
 
 ATS ANALYSIS:
 - Identify the 10-20 highest-signal requirements, skills, tools, domain terms, and
@@ -1770,17 +1867,62 @@ def _search_normalize(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def _keyword_present(keyword: str, text: str) -> bool:
+KEYWORD_EQUIVALENCE_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("penetrasjonstesting", "penetration testing", "penetration tester", "pen testing"),
+    ("cybersikkerhet", "cyber security", "cybersecurity"),
+    ("informasjonssikkerhet", "information security", "infosec"),
+    ("applikasjonssikkerhet", "application security", "appsec"),
+    ("risikostyring", "risk management"),
+    ("nettverksinfrastruktur", "network infrastructure"),
+    ("kunstig intelligens", "artificial intelligence", "ai", "ki"),
+    ("programvareutvikling", "software development"),
+    ("prosjektledelse", "project management"),
+    (
+        "governance, risk og compliance",
+        "governance, risk and compliance",
+        "governance risk compliance",
+        "grc",
+    ),
+)
+
+
+def _literal_keyword_present(keyword: str, text: str) -> bool:
     normalized_keyword = _search_normalize(keyword)
     normalized_text = _search_normalize(text)
     if not normalized_keyword:
         return False
-    if normalized_keyword in normalized_text:
+    compact_keyword = re.sub(r"[^\w]+", "", normalized_keyword)
+    if len(compact_keyword) <= 3:
+        if re.search(
+            rf"(?<!\w){re.escape(normalized_keyword)}(?!\w)",
+            normalized_text,
+        ):
+            return True
+    elif normalized_keyword in normalized_text:
         return True
 
-    compact_keyword = re.sub(r"[^\w]+", "", normalized_keyword)
     compact_text = re.sub(r"[^\w]+", "", normalized_text)
     return len(compact_keyword) >= 3 and compact_keyword in compact_text
+
+
+def _keyword_present(keyword: str, text: str) -> bool:
+    if _literal_keyword_present(keyword, text):
+        return True
+
+    normalized_keyword = _search_normalize(keyword)
+    compact_keyword = re.sub(r"[^\w]+", "", normalized_keyword)
+    for aliases in KEYWORD_EQUIVALENCE_GROUPS:
+        if any(
+            normalized_keyword == _search_normalize(alias)
+            or compact_keyword == re.sub(
+                r"[^\w]+",
+                "",
+                _search_normalize(alias),
+            )
+            for alias in aliases
+        ):
+            return any(_literal_keyword_present(alias, text) for alias in aliases)
+    return False
 
 
 def _master_cv_source_text(master_cv: MasterCv) -> str:
@@ -1816,10 +1958,20 @@ def reconcile_keyword_evidence(
         )
         (verified if direct_support or grounded_excerpt else rejected).append(keyword)
 
-    combined_missing = [*missing_keywords, *rejected]
+    verified_keys = {normalize_keyword(keyword) for keyword in verified}
+    unsupported_missing: list[str] = []
+    for keyword in missing_keywords:
+        key = normalize_keyword(keyword)
+        if _keyword_present(keyword, source_text):
+            if key not in verified_keys:
+                verified.append(keyword)
+                verified_keys.add(key)
+        else:
+            unsupported_missing.append(keyword)
+
+    combined_missing = [*unsupported_missing, *rejected]
     unique_missing: list[str] = []
     seen_missing: set[str] = set()
-    verified_keys = {normalize_keyword(keyword) for keyword in verified}
     for keyword in combined_missing:
         key = normalize_keyword(keyword)
         if key and key not in seen_missing and key not in verified_keys:
@@ -1856,52 +2008,84 @@ def source_cv_document(master_cv: MasterCv) -> TailoredCvDocument:
     )
 
 
-def calculate_ats_score(
+def document_evidence_fragments(
+    document: TailoredCvDocument,
+) -> list[tuple[str, str]]:
+    """Return searchable factual fragments with user-facing section labels."""
+
+    fragments: list[tuple[str, str]] = []
+
+    def add(section: str, *values: str | None) -> None:
+        fragments.extend(
+            (section, value.strip())
+            for value in values
+            if value and value.strip()
+        )
+
+    add("Profile", document.headline, document.professional_summary)
+    add("Skills", *document.skills)
+    for experience in document.work_experience:
+        add(
+            "Work experience",
+            experience.job_title,
+            experience.company,
+            experience.location,
+            *experience.bullet_points,
+        )
+    for project in document.projects:
+        add(
+            "Projects",
+            project.name,
+            project.role,
+            *project.technologies,
+            *project.bullet_points,
+        )
+    for education in document.education:
+        add(
+            "Education",
+            education.qualification,
+            education.institution,
+            education.start_date,
+            education.end_date,
+            *education.details,
+        )
+    add("Certifications", *document.certifications)
+    for course in document.courses:
+        add(
+            "Courses",
+            course.name,
+            course.provider,
+            course.completed_date,
+            *course.details,
+        )
+    add("Languages", *document.languages)
+    return fragments
+
+
+def document_evidence_text(document: TailoredCvDocument) -> str:
+    """Flatten factual ATS sections while preserving their source boundaries."""
+
+    return " ".join(text for _, text in document_evidence_fragments(document))
+
+
+def calculate_ats_score_breakdown(
     document: TailoredCvDocument,
     matched_keywords: list[str],
     missing_keywords: list[str],
-) -> int:
-    """Calculate a transparent 60/20/10/10 score without model self-grading."""
+) -> list[AtsScoreComponent]:
+    """Calculate transparent 60/20/10/10 components without model grading."""
 
     total_keywords = len(matched_keywords) + len(missing_keywords)
     if total_keywords == 0:
-        return 0
+        coverage_points = 0.0
+    else:
+        coverage_points = 60 * len(matched_keywords) / total_keywords
 
-    coverage_points = 60 * len(matched_keywords) / total_keywords
     headline_summary = " ".join(
         part for part in [document.headline, document.professional_summary] if part
     )
     skills_text = " ".join(document.skills)
-    evidence_text = " ".join(
-        [
-            *[
-                bullet
-                for experience in document.work_experience
-                for bullet in experience.bullet_points
-            ],
-            *[
-                bullet
-                for project in document.projects
-                for bullet in project.bullet_points
-            ],
-            *[
-                technology
-                for project in document.projects
-                for technology in project.technologies
-            ],
-            *[
-                detail
-                for education in document.education
-                for detail in education.details
-            ],
-            *document.certifications,
-            *[
-                value
-                for course in document.courses
-                for value in [course.name, course.provider or "", *course.details]
-            ],
-        ]
-    )
+    evidence_text = document_evidence_text(document)
 
     if matched_keywords:
         placement_total = 0.0
@@ -1945,17 +2129,315 @@ def calculate_ats_score(
         readability_points += 2.0
     readability_points += 2.0 if document.skills else 1.0
 
-    return max(
-        0,
-        min(
-            100,
-            round(
-                coverage_points
-                + placement_points
-                + alignment_points
-                + readability_points
+    return [
+        AtsScoreComponent(
+            key="keywordCoverage",
+            label="Supported keyword coverage",
+            score=round(coverage_points, 2),
+            maxScore=60,
+            explanation=(
+                f"{len(matched_keywords)} of {total_keywords} assessed requirements "
+                "are supported by the CV."
+                if total_keywords
+                else "No high-signal requirements were available to assess."
             ),
         ),
+        AtsScoreComponent(
+            key="keywordPlacement",
+            label="Keyword placement",
+            score=round(placement_points, 2),
+            maxScore=20,
+            explanation=(
+                "Measures truthful placement across the profile, skills, and "
+                "evidence sections."
+            ),
+        ),
+        AtsScoreComponent(
+            key="roleAlignment",
+            label="Role alignment",
+            score=round(alignment_points, 2),
+            maxScore=10,
+            explanation=(
+                "Measures whether supported role requirements are visible early "
+                "in the headline or summary."
+            ),
+        ),
+        AtsScoreComponent(
+            key="readability",
+            label="ATS readability",
+            score=round(readability_points, 2),
+            maxScore=10,
+            explanation=(
+                "Checks summary length, factual sections, skills, and readable "
+                "bullet structure."
+            ),
+        ),
+    ]
+
+
+def calculate_ats_score(
+    document: TailoredCvDocument,
+    matched_keywords: list[str],
+    missing_keywords: list[str],
+) -> int:
+    """Return the rounded total of the deterministic ATS score components."""
+
+    components = calculate_ats_score_breakdown(
+        document,
+        matched_keywords,
+        missing_keywords,
+    )
+    return max(0, min(100, round(sum(item.score for item in components))))
+
+
+def build_verified_keyword_evidence(
+    master_cv: MasterCv,
+    matched_keywords: list[str],
+    model_evidence: list[KeywordEvidence],
+) -> list[AtsKeywordEvidenceDetail]:
+    """Attach each matched term to a grounded CV fragment when available."""
+
+    document = source_cv_document(master_cv)
+    fragments = document_evidence_fragments(document)
+    source_text = _master_cv_source_text(master_cv)
+    model_by_keyword: dict[str, list[str]] = {}
+    for item in model_evidence:
+        if _search_normalize(item.evidence_text) in _search_normalize(source_text):
+            model_by_keyword.setdefault(normalize_keyword(item.keyword), []).append(
+                item.evidence_text
+            )
+
+    details: list[AtsKeywordEvidenceDetail] = []
+    for keyword in matched_keywords:
+        direct = next(
+            (
+                (section, text)
+                for section, text in fragments
+                if _keyword_present(keyword, text)
+            ),
+            None,
+        )
+        if direct is not None:
+            details.append(
+                AtsKeywordEvidenceDetail(
+                    keyword=keyword,
+                    section=direct[0],
+                    evidenceText=direct[1],
+                )
+            )
+            continue
+
+        grounded_excerpt = next(
+            iter(model_by_keyword.get(normalize_keyword(keyword), [])),
+            None,
+        )
+        if grounded_excerpt:
+            section = next(
+                (
+                    fragment_section
+                    for fragment_section, fragment_text in fragments
+                    if _search_normalize(grounded_excerpt)
+                    in _search_normalize(fragment_text)
+                ),
+                "CV evidence",
+            )
+            details.append(
+                AtsKeywordEvidenceDetail(
+                    keyword=keyword,
+                    section=section,
+                    evidenceText=grounded_excerpt,
+                )
+            )
+    return details
+
+
+def build_section_feedback(
+    document: TailoredCvDocument,
+    matched_keywords: list[str],
+) -> list[AtsSectionFeedback]:
+    """Generate deterministic section-level findings and safe recommendations."""
+
+    total_matched = len(matched_keywords)
+
+    def match_count(text: str) -> int:
+        return sum(
+            1 for keyword in matched_keywords if _keyword_present(keyword, text)
+        )
+
+    profile_text = " ".join(
+        value
+        for value in [document.headline, document.professional_summary]
+        if value
+    )
+    profile_matches = match_count(profile_text)
+    summary_length = len(document.professional_summary.strip())
+    profile_strong = (
+        60 <= summary_length <= 900
+        and (not total_matched or profile_matches >= min(3, total_matched))
+    )
+
+    skills_text = " ".join(document.skills)
+    skills_matches = match_count(skills_text)
+    evidence_text = " ".join(
+        text
+        for section, text in document_evidence_fragments(document)
+        if section in {"Work experience", "Projects"}
+    )
+    evidence_matches = match_count(evidence_text)
+    has_experience_evidence = bool(document.work_experience or document.projects)
+
+    credentials_text = " ".join(
+        text
+        for section, text in document_evidence_fragments(document)
+        if section
+        in {"Education", "Certifications", "Courses", "Languages"}
+    )
+    credential_matches = match_count(credentials_text)
+    has_credentials = bool(
+        document.education
+        or document.certifications
+        or document.courses
+        or document.languages
+    )
+
+    return [
+        AtsSectionFeedback(
+            section="Profile and summary",
+            status="strong" if profile_strong else "needs_attention",
+            findings=[
+                f"{profile_matches} of {total_matched} supported requirements are "
+                "visible in the headline or summary.",
+                f"The professional summary contains {summary_length} characters.",
+            ],
+            recommendations=(
+                []
+                if profile_strong
+                else [
+                    "Bring the most important supported role terms into the opening "
+                    "lines without adding unsupported claims."
+                ]
+            ),
+        ),
+        AtsSectionFeedback(
+            section="Skills",
+            status=(
+                "strong"
+                if document.skills and (not total_matched or skills_matches > 0)
+                else "needs_attention" if document.skills else "not_available"
+            ),
+            findings=[
+                f"The CV lists {len(document.skills)} skills; {skills_matches} "
+                "supported requirements appear there."
+            ],
+            recommendations=(
+                []
+                if skills_matches > 0
+                else [
+                    "Add only already-demonstrated job-relevant skills to the skills "
+                    "section, using the vacancy's terminology when equivalent."
+                ]
+            ),
+        ),
+        AtsSectionFeedback(
+            section="Experience and projects",
+            status=(
+                "strong"
+                if has_experience_evidence and evidence_matches > 0
+                else "needs_attention"
+                if has_experience_evidence
+                else "not_available"
+            ),
+            findings=[
+                f"{len(document.work_experience)} work entries and "
+                f"{len(document.projects)} projects provide {evidence_matches} "
+                "supported requirement matches."
+            ],
+            recommendations=(
+                []
+                if evidence_matches > 0
+                else [
+                    "Connect supported skills to concrete existing work or project "
+                    "bullets; do not create new experience."
+                ]
+            ),
+        ),
+        AtsSectionFeedback(
+            section="Education and credentials",
+            status=(
+                "strong"
+                if has_credentials and credential_matches > 0
+                else "needs_attention" if has_credentials else "not_available"
+            ),
+            findings=[
+                f"Education, certifications, courses, and languages support "
+                f"{credential_matches} assessed requirements."
+            ],
+            recommendations=(
+                []
+                if has_credentials
+                else [
+                    "Add factual education, certifications, courses, or languages "
+                    "when they are relevant and verifiable."
+                ]
+            ),
+        ),
+    ]
+
+
+def build_ats_review_details(
+    master_cv: MasterCv,
+    matched_keywords: list[str],
+    missing_keywords: list[str],
+    model_evidence: list[KeywordEvidence],
+) -> AtsReviewDetails:
+    """Build explainable review details exclusively from grounded CV data."""
+
+    document = source_cv_document(master_cv)
+    evidence = build_verified_keyword_evidence(
+        master_cv,
+        matched_keywords,
+        model_evidence,
+    )
+    strengths = [
+        f"{item.keyword} is supported in {item.section}: {item.evidence_text}"
+        for item in evidence[:4]
+    ]
+    if not strengths:
+        strengths = [
+            "No high-signal vacancy requirement had a displayable evidence excerpt."
+        ]
+
+    priority_actions = [
+        (
+            f"Keep {keyword} marked as unsupported unless you can add genuine "
+            "evidence from your existing experience, projects, education, or courses."
+        )
+        for keyword in missing_keywords[:4]
+    ]
+    profile_text = " ".join(
+        value
+        for value in [document.headline, document.professional_summary]
+        if value
+    )
+    if matched_keywords and not all(
+        _keyword_present(keyword, profile_text) for keyword in matched_keywords[:3]
+    ):
+        priority_actions.insert(
+            0,
+            "Surface the most important supported requirements earlier in the "
+            "professional summary.",
+        )
+
+    return AtsReviewDetails(
+        scoreBreakdown=calculate_ats_score_breakdown(
+            document,
+            matched_keywords,
+            missing_keywords,
+        ),
+        keywordEvidence=evidence,
+        strengths=strengths,
+        priorityActions=priority_actions[:6],
+        sectionFeedback=build_section_feedback(document, matched_keywords),
     )
 
 
@@ -2038,6 +2520,12 @@ async def review_cv_with_openai(
         matchedKeywords=matched,
         missingKeywords=missing,
         explanation=validated.explanation,
+        details=build_ats_review_details(
+            request.master_cv,
+            matched,
+            missing,
+            validated.keyword_evidence,
+        ),
     )
 
 
@@ -2155,6 +2643,11 @@ def build_tailoring_prompt(request: GenerateTailoredCvRequest) -> str:
         separators=(",", ":"),
     )
     response_contract_json = json.dumps(response_contract, separators=(",", ":"))
+    baseline_json = (
+        request.keyword_baseline.model_dump_json(by_alias=True)
+        if request.keyword_baseline
+        else "null"
+    )
 
     return f"""
 Create a tailored CV analysis as JSON.
@@ -2168,11 +2661,20 @@ Required one-to-one source mapping:
 Required one-to-one project mapping:
 {required_project_mapping_json}
 
+Fixed reviewed keyword baseline:
+<keyword_baseline_json>
+{baseline_json}
+</keyword_baseline_json>
+
 For every required work or project source bullet index, return exactly one
 rewritten bullet. Do not add indices, omit indices, or duplicate indices. Keep a
 source bullet unchanged when no truthful, relevant rephrasing is possible. Return
 one grounded keyword_evidence item for every matched keyword. Set ats_match_score
 to 0; the application calculates it after validation.
+
+When keyword_baseline_json is not null, copy its matchedKeywords and
+missingKeywords arrays into the response exactly. Optimize placement of the
+matched keywords, but never change either classification list.
 
 Optimization order:
 1. Cover the most important supported role and technical terms.
@@ -2229,16 +2731,7 @@ def keyword_coverage(
             [
                 document.professional_summary,
                 *document.skills,
-                *[
-                    bullet
-                    for experience in document.work_experience
-                    for bullet in experience.bullet_points
-                ],
-                *[
-                    bullet
-                    for project in document.projects
-                    for bullet in project.bullet_points
-                ],
+                document_evidence_text(document),
             ]
         )
     )
@@ -2268,22 +2761,7 @@ def keyword_placement_score(
             )
         ),
         normalize_keyword(" ".join(document.skills)),
-        normalize_keyword(
-            " ".join(
-                [
-                    *[
-                        bullet
-                        for experience in document.work_experience
-                        for bullet in experience.bullet_points
-                    ],
-                    *[
-                        bullet
-                        for project in document.projects
-                        for bullet in project.bullet_points
-                    ],
-                ]
-            )
-        ),
+        normalize_keyword(document_evidence_text(document)),
     ]
     placements = sum(
         1
@@ -2467,12 +2945,16 @@ async def tailor_cv_with_openai(
     """Generate one grounded draft and optionally refine low-scoring wording."""
 
     def validate_and_score(candidate: TailoringResult) -> tuple[TailoringResult, TailoredCvDocument]:
-        matched, missing = reconcile_keyword_evidence(
-            request.master_cv,
-            candidate.matched_keywords,
-            candidate.missing_keywords,
-            candidate.keyword_evidence,
-        )
+        if request.keyword_baseline is not None:
+            matched = list(request.keyword_baseline.matched_keywords)
+            missing = list(request.keyword_baseline.missing_keywords)
+        else:
+            matched, missing = reconcile_keyword_evidence(
+                request.master_cv,
+                candidate.matched_keywords,
+                candidate.missing_keywords,
+                candidate.keyword_evidence,
+            )
         grounded = candidate.model_copy(
             update={
                 "matched_keywords": matched,
@@ -2494,6 +2976,47 @@ async def tailor_cv_with_openai(
             }
         )
         return scored, document
+
+    def protect_original_score(candidate: TailoringResult) -> TailoringResult:
+        """Never return a tailored document that scores below its source CV."""
+
+        original_score = calculate_ats_score(
+            source_cv_document(request.master_cv),
+            candidate.matched_keywords,
+            candidate.missing_keywords,
+        )
+        if candidate.ats_match_score >= original_score:
+            return candidate
+
+        return TailoringResult(
+            professional_summary=request.master_cv.professional_summary,
+            experience_rewrites=[
+                ExperienceRewrite(
+                    experience_index=experience_index,
+                    bullet_points=[
+                        TailoredBullet(source_bullet_index=index, text=bullet)
+                        for index, bullet in enumerate(experience.bullet_points)
+                    ],
+                )
+                for experience_index, experience in enumerate(
+                    request.master_cv.work_experience
+                )
+            ],
+            project_rewrites=[
+                ProjectRewrite(
+                    project_index=project_index,
+                    bullet_points=[
+                        TailoredBullet(source_bullet_index=index, text=bullet)
+                        for index, bullet in enumerate(project.bullet_points)
+                    ],
+                )
+                for project_index, project in enumerate(request.master_cv.projects)
+            ],
+            matched_keywords=candidate.matched_keywords,
+            missing_keywords=candidate.missing_keywords,
+            keyword_evidence=candidate.keyword_evidence,
+            ats_match_score=original_score,
+        )
 
     async def request_tailoring(prompt: str, temperature: float) -> TailoringResult:
         completion = await client.chat.completions.create(
@@ -2541,7 +3064,7 @@ async def tailor_cv_with_openai(
         or initial.ats_match_score >= threshold
         or not initial.matched_keywords
     ):
-        return initial
+        return protect_original_score(initial)
 
     try:
         candidate, candidate_document = validate_and_score(
@@ -2555,10 +3078,10 @@ async def tailor_cv_with_openai(
             "ATS refinement failed; returning the valid initial result.",
             exc_info=True,
         )
-        return initial
+        return protect_original_score(initial)
 
     if not same_keyword_classification(initial, candidate):
-        return initial
+        return protect_original_score(initial)
 
     initial_coverage = keyword_coverage(
         initial_document,
@@ -2582,9 +3105,9 @@ async def tailor_cv_with_openai(
         and (candidate_coverage, candidate_placement)
         > (initial_coverage, initial_placement)
     ):
-        return candidate
+        return protect_original_score(candidate)
 
-    return initial
+    return protect_original_score(initial)
 
 
 def render_cv_html(document: TailoredCvDocument) -> str:

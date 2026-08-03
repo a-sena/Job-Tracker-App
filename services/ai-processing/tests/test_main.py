@@ -6,7 +6,6 @@ from typing import Any
 import pytest
 
 from app.main import (
-    AtsReview,
     AiOutputError,
     JobExtractionError,
     GenerateTailoredCvRequest,
@@ -18,6 +17,7 @@ from app.main import (
     build_ats_review_prompt,
     build_interview_questions_prompt,
     build_tailoring_prompt,
+    calculate_ats_score,
     extract_job_details,
     extract_master_cv_from_pdf_with_openai,
     extract_master_cv_with_openai,
@@ -29,6 +29,7 @@ from app.main import (
     render_interview_questions_html,
     review_cv_with_openai,
     render_cv_html,
+    source_cv_document,
     tailor_cv_with_openai,
     validate_public_job_url,
     validate_and_merge_tailoring,
@@ -133,6 +134,7 @@ def test_review_request_accepts_camel_case_and_legacy_pascal_case() -> None:
     assert set(camel_case.model_dump(by_alias=True)) == {
         "masterCv",
         "jobDescription",
+        "keywordBaseline",
     }
 
 
@@ -143,12 +145,17 @@ def test_workflow_openapi_contracts_are_camel_case_and_strict() -> None:
     interview_request = schemas["InterviewQuestionsPackageRequest"]
     interview_response = schemas["InterviewQuestionsPackage"]
 
-    assert set(review_request["properties"]) == {"masterCv", "jobDescription"}
+    assert set(review_request["properties"]) == {
+        "masterCv",
+        "jobDescription",
+        "keywordBaseline",
+    }
     assert set(review_response["properties"]) == {
         "atsMatchScore",
         "matchedKeywords",
         "missingKeywords",
         "explanation",
+        "details",
     }
     assert set(review_response["required"]) == set(review_response["properties"])
     assert set(interview_request["properties"]) == {
@@ -191,6 +198,40 @@ def test_prompt_contains_truthfulness_rules_and_required_mapping() -> None:
     assert '"experience_index":0' in prompt
     assert '"required_source_bullet_indices":[0,1]' in prompt
     assert "<job_description>" in prompt
+
+
+def test_tailoring_prompt_contains_fixed_reviewed_keyword_baseline() -> None:
+    request_data = make_request().model_dump(by_alias=True)
+    request_data["keywordBaseline"] = {
+        "matchedKeywords": ["C#", "PostgreSQL", "APIs"],
+        "missingKeywords": ["Kubernetes", "distributed systems"],
+    }
+    prompt = build_tailoring_prompt(
+        GenerateTailoredCvRequest.model_validate(request_data)
+    )
+
+    assert "<keyword_baseline_json>" in prompt
+    assert '"matchedKeywords":["C#","PostgreSQL","APIs"]' in prompt
+    assert "copy its matchedKeywords" in prompt
+
+
+def test_keyword_baseline_rejects_contradictory_classification() -> None:
+    request_data = make_request().model_dump(by_alias=True)
+    request_data["keywordBaseline"] = {
+        "matchedKeywords": ["PostgreSQL"],
+        "missingKeywords": ["postgresql"],
+    }
+
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        GenerateTailoredCvRequest.model_validate(request_data)
+
+
+def test_language_requirement_receives_factual_placement_credit() -> None:
+    document = source_cv_document(make_request().master_cv)
+
+    score = calculate_ats_score(document, ["Norwegian"], [])
+
+    assert score >= 75
 
 
 def test_ats_review_prompt_contains_same_rubric_and_source_boundaries() -> None:
@@ -332,6 +373,88 @@ async def test_unverified_matched_keyword_is_moved_to_missing() -> None:
     assert result.ats_match_score < 99
 
 
+@pytest.mark.asyncio
+async def test_norwegian_keyword_matches_grounded_english_cv_equivalent() -> None:
+    request_data = make_request().model_dump(by_alias=True)
+    request_data["masterCv"]["courses"] = [
+        {
+            "name": "TryHackMe - Jr Penetration Tester",
+            "provider": None,
+            "completed_date": None,
+            "details": ["Practical penetration testing training"],
+        }
+    ]
+    candidate = {
+        "atsMatchScore": 0,
+        "matchedKeywords": ["Cybersikkerhet"],
+        "missingKeywords": ["Penetrasjonstesting"],
+        "keywordEvidence": [],
+        "explanation": "The CV contains relevant security training.",
+    }
+
+    result = await review_cv_with_openai(  # type: ignore[arg-type]
+        GenerateTailoredCvRequest.model_validate(request_data),
+        FakeOpenAiClient(json.dumps(candidate)),
+        Settings(openai_api_key="test-key"),
+    )
+
+    assert "Penetrasjonstesting" in result.matched_keywords
+    assert "Penetrasjonstesting" not in result.missing_keywords
+    assert any(
+        item.keyword == "Penetrasjonstesting"
+        and "Penetration Tester" in item.evidence_text
+        for item in result.details.keyword_evidence
+    )
+
+
+@pytest.mark.asyncio
+async def test_short_ai_keyword_does_not_match_inside_unrelated_word() -> None:
+    request_data = make_request().model_dump(by_alias=True)
+    request_data["masterCv"]["skills"] = ["TailwindCSS"]
+    candidate = {
+        "atsMatchScore": 0,
+        "matchedKeywords": ["AI"],
+        "missingKeywords": [],
+        "keywordEvidence": [],
+        "explanation": "AI must have explicit support.",
+    }
+
+    result = await review_cv_with_openai(  # type: ignore[arg-type]
+        GenerateTailoredCvRequest.model_validate(request_data),
+        FakeOpenAiClient(json.dumps(candidate)),
+        Settings(openai_api_key="test-key"),
+    )
+
+    assert result.matched_keywords == []
+    assert result.missing_keywords == ["AI"]
+
+
+@pytest.mark.asyncio
+async def test_review_accepts_camel_case_keyword_evidence_from_openai() -> None:
+    candidate = {
+        "atsMatchScore": 0,
+        "matchedKeywords": ["REST APIs"],
+        "missingKeywords": ["Kubernetes"],
+        "keywordEvidence": [
+            {
+                "keyword": "REST APIs",
+                "evidenceText": "Built REST APIs in C#.",
+            }
+        ],
+        "explanation": "The CV supports REST APIs but not Kubernetes.",
+    }
+    client = FakeOpenAiClient(json.dumps(candidate))
+
+    result = await review_cv_with_openai(  # type: ignore[arg-type]
+        make_request(),
+        client,
+        Settings(openai_api_key="test-key"),
+    )
+
+    assert result.matched_keywords == ["REST APIs"]
+    assert result.missing_keywords == ["Kubernetes"]
+
+
 class FakeCompletions:
     def __init__(self, content: str | list[str]) -> None:
         self.contents = [content] if isinstance(content, str) else content
@@ -401,18 +524,16 @@ class FakeResponses:
 
 @pytest.mark.asyncio
 async def test_ats_review_uses_configured_model_json_mode_and_fixed_contract() -> None:
-    expected = AtsReview.model_validate(
-        {
-            "atsMatchScore": 58,
-            "matchedKeywords": ["C#", "PostgreSQL", "APIs"],
-            "missingKeywords": ["Kubernetes", "distributed systems"],
-            "explanation": (
-                "The CV supports the core backend requirements, but does not "
-                "evidence the requested orchestration and distributed-systems work."
-            ),
-        }
-    )
-    client = FakeOpenAiClient(expected.model_dump_json(by_alias=True))
+    expected = {
+        "atsMatchScore": 58,
+        "matchedKeywords": ["C#", "PostgreSQL", "APIs"],
+        "missingKeywords": ["Kubernetes", "distributed systems"],
+        "explanation": (
+            "The CV supports the core backend requirements, but does not "
+            "evidence the requested orchestration and distributed-systems work."
+        ),
+    }
+    client = FakeOpenAiClient(json.dumps(expected))
     settings = Settings(openai_api_key="test-key")
 
     result = await review_cv_with_openai(  # type: ignore[arg-type]
@@ -428,6 +549,15 @@ async def test_ats_review_uses_configured_model_json_mode_and_fixed_contract() -
     assert arguments["temperature"] == 0
     assert result.ats_match_score == 64
     assert result.model_dump(by_alias=True)["atsMatchScore"] == 64
+    assert len(result.details.score_breakdown) == 4
+    assert result.details.section_feedback
+    assert round(sum(item.score for item in result.details.score_breakdown)) == 64
+    assert {item.keyword for item in result.details.keyword_evidence} == {
+        "C#",
+        "PostgreSQL",
+        "APIs",
+    }
+    assert result.details.priority_actions
 
 
 @pytest.mark.asyncio
@@ -554,6 +684,74 @@ async def test_openai_call_uses_requested_model_and_json_mode() -> None:
     assert arguments["response_format"] == {"type": "json_object"}
     assert arguments["temperature"] == 0.1
     assert result.ats_match_score == 76
+
+
+@pytest.mark.asyncio
+async def test_tailoring_reuses_reviewed_keyword_baseline_exactly() -> None:
+    request_data = make_request().model_dump(by_alias=True)
+    request_data["keywordBaseline"] = {
+        "matchedKeywords": ["C#", "PostgreSQL", "APIs"],
+        "missingKeywords": ["Kubernetes", "distributed systems"],
+    }
+    request = GenerateTailoredCvRequest.model_validate(request_data)
+    model_result = make_tailoring().model_copy(
+        update={
+            "matched_keywords": ["Kubernetes"],
+            "missing_keywords": ["C#"],
+        }
+    )
+    client = FakeOpenAiClient(model_result.model_dump_json())
+
+    result = await tailor_cv_with_openai(  # type: ignore[arg-type]
+        request,
+        client,
+        Settings(
+            openai_api_key="test-key",
+            openai_ats_refinement_threshold=0,
+        ),
+    )
+
+    assert result.matched_keywords == ["C#", "PostgreSQL", "APIs"]
+    assert result.missing_keywords == ["Kubernetes", "distributed systems"]
+
+
+@pytest.mark.asyncio
+async def test_tailoring_never_returns_a_document_scoring_below_source_cv() -> None:
+    request_data = make_request().model_dump(by_alias=True)
+    request_data["keywordBaseline"] = {
+        "matchedKeywords": ["C#", "PostgreSQL", "APIs"],
+        "missingKeywords": ["Kubernetes", "distributed systems"],
+    }
+    request = GenerateTailoredCvRequest.model_validate(request_data)
+    degraded_data = make_tailoring().model_dump()
+    degraded_data["professional_summary"] = "Backend engineer building services."
+    degraded_data["experience_rewrites"][0]["bullet_points"][0]["text"] = (
+        "Built reliable backend services."
+    )
+    degraded_data["experience_rewrites"][0]["bullet_points"][1]["text"] = (
+        "Improved database query performance."
+    )
+    degraded = TailoringResult.model_validate(degraded_data)
+
+    result = await tailor_cv_with_openai(  # type: ignore[arg-type]
+        request,
+        FakeOpenAiClient(degraded.model_dump_json()),
+        Settings(
+            openai_api_key="test-key",
+            openai_ats_refinement_threshold=0,
+        ),
+    )
+
+    source_score = calculate_ats_score(
+        source_cv_document(request.master_cv),
+        request.keyword_baseline.matched_keywords,
+        request.keyword_baseline.missing_keywords,
+    )
+    assert result.ats_match_score == source_score
+    assert result.professional_summary == request.master_cv.professional_summary
+    assert result.experience_rewrites[0].bullet_points[0].text == (
+        "Built REST APIs in C#."
+    )
 
 
 @pytest.mark.asyncio

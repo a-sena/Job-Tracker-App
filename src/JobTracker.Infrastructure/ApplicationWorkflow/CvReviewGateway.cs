@@ -49,7 +49,11 @@ internal sealed class CvReviewGateway(HttpClient httpClient) : ICvReviewGateway
         {
             if (!response.IsSuccessStatusCode)
             {
+                var providerDetail = await TryReadProviderDetailAsync(
+                    response,
+                    cancellationToken);
                 throw new ApplicationWorkflowException(
+                    providerDetail ??
                     "The CV could not be reviewed. Verify the CV and job description.",
                     (int)response.StatusCode);
             }
@@ -66,12 +70,26 @@ internal sealed class CvReviewGateway(HttpClient httpClient) : ICvReviewGateway
                 if (result.AtsMatchScore is < 0 or > 100 ||
                     result.MatchedKeywords is null ||
                     result.MissingKeywords is null ||
+                    result.Details is null ||
                     string.IsNullOrWhiteSpace(result.Explanation) ||
                     result.MatchedKeywords.Any(string.IsNullOrWhiteSpace) ||
                     result.MissingKeywords.Any(string.IsNullOrWhiteSpace) ||
                     result.MatchedKeywords
                         .Intersect(result.MissingKeywords, StringComparer.OrdinalIgnoreCase)
-                        .Any())
+                        .Any() ||
+                    result.Details.ScoreBreakdown is null ||
+                    result.Details.ScoreBreakdown.Count != 4 ||
+                    result.Details.ScoreBreakdown.Any(component =>
+                        string.IsNullOrWhiteSpace(component.Key) ||
+                        string.IsNullOrWhiteSpace(component.Label) ||
+                        string.IsNullOrWhiteSpace(component.Explanation) ||
+                        component.MaxScore <= 0 ||
+                        component.Score < 0 ||
+                        component.Score > component.MaxScore) ||
+                    result.Details.KeywordEvidence is null ||
+                    result.Details.Strengths is null ||
+                    result.Details.PriorityActions is null ||
+                    result.Details.SectionFeedback is null)
                 {
                     throw new ApplicationWorkflowException(
                         "The ATS review service returned an invalid response.",
@@ -90,7 +108,28 @@ internal sealed class CvReviewGateway(HttpClient httpClient) : ICvReviewGateway
         }
     }
 
+    private static async Task<string?> TryReadProviderDetailAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var problem = await response.Content.ReadFromJsonAsync<ProviderProblem>(
+                ResponseJsonOptions,
+                cancellationToken);
+            return string.IsNullOrWhiteSpace(problem?.Detail)
+                ? null
+                : problem.Detail;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private sealed record ReviewRequest(
         [property: JsonPropertyName("masterCv")] MasterCvContentDto MasterCv,
         [property: JsonPropertyName("jobDescription")] string JobDescription);
+
+    private sealed record ProviderProblem(string? Detail);
 }

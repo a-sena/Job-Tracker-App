@@ -100,6 +100,7 @@ internal sealed class CvService(
         var generated = await tailoringGateway.GenerateAsync(
             masterContent,
             jobApplication.Description,
+            null,
             cancellationToken);
 
         var tailoredContent = JsonSerializer.Serialize(

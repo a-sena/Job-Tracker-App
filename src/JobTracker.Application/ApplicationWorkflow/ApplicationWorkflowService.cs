@@ -93,7 +93,8 @@ internal sealed class ApplicationWorkflowService(
                 result.AtsMatchScore,
                 result.MatchedKeywords,
                 result.MissingKeywords,
-                result.Explanation);
+                result.Explanation,
+                JsonSerializer.Serialize(result.Details, JsonOptions));
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
@@ -118,6 +119,9 @@ internal sealed class ApplicationWorkflowService(
         var generated = await tailoringGateway.GenerateAsync(
             originalContent,
             RequireDescription(draft),
+            new CvKeywordBaseline(
+                draft.OriginalMatchedKeywords,
+                draft.OriginalMissingKeywords),
             cancellationToken);
         ValidateGrounding(originalContent, generated.TailoredContent);
 
@@ -554,6 +558,7 @@ internal sealed class ApplicationWorkflowService(
             draft.OriginalMatchedKeywords,
             draft.OriginalMissingKeywords,
             draft.AtsExplanation,
+            DeserializeReviewDetails(draft.AtsReviewDetails),
             draft.TailoredAtsScore,
             draft.TailoredMatchedKeywords,
             draft.TailoredMissingKeywords,
@@ -562,6 +567,23 @@ internal sealed class ApplicationWorkflowService(
             draft.InterviewQuestionsPdfFileName,
             draft.CreatedAt,
             draft.UpdatedAt);
+
+    private static CvReviewDetailsDto? DeserializeReviewDetails(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<CvReviewDetailsDto>(content, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static void EnsureUserId(Guid userId)
     {

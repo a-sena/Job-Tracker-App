@@ -46,6 +46,7 @@ public sealed record ApplicationDraftDto(
     IReadOnlyList<string> OriginalMatchedKeywords,
     IReadOnlyList<string> OriginalMissingKeywords,
     string? OriginalAtsExplanation,
+    CvReviewDetailsDto? OriginalReviewDetails,
     decimal? TailoredAtsScore,
     IReadOnlyList<string> TailoredMatchedKeywords,
     IReadOnlyList<string> TailoredMissingKeywords,

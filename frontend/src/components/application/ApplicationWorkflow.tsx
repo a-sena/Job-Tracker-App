@@ -31,6 +31,7 @@ export interface ApplicationDraft {
   originalMatchedKeywords: string[];
   originalMissingKeywords: string[];
   originalAtsExplanation: string | null;
+  originalReviewDetails: CvReviewDetails | null;
   tailoredAtsScore: number | null;
   tailoredMatchedKeywords: string[];
   tailoredMissingKeywords: string[];
@@ -39,6 +40,35 @@ export interface ApplicationDraft {
   interviewQuestionsPdfFileName: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface CvScoreComponent {
+  key: string;
+  label: string;
+  score: number;
+  maxScore: number;
+  explanation: string;
+}
+
+interface CvKeywordEvidence {
+  keyword: string;
+  section: string;
+  evidenceText: string;
+}
+
+interface CvSectionFeedback {
+  section: string;
+  status: "strong" | "needs_attention" | "not_available";
+  findings: string[];
+  recommendations: string[];
+}
+
+interface CvReviewDetails {
+  scoreBreakdown: CvScoreComponent[];
+  keywordEvidence: CvKeywordEvidence[];
+  strengths: string[];
+  priorityActions: string[];
+  sectionFeedback: CvSectionFeedback[];
 }
 
 interface ApplicationCategory {
@@ -162,6 +192,7 @@ function normalizeDraft(draft: ApplicationDraft): ApplicationDraft {
     title: draft.title ?? "",
     company: draft.company ?? "",
     description: draft.description ?? "",
+    originalReviewDetails: draft.originalReviewDetails ?? null,
     originalMatchedKeywords: draft.originalMatchedKeywords ?? [],
     originalMissingKeywords: draft.originalMissingKeywords ?? [],
     tailoredMatchedKeywords: draft.tailoredMatchedKeywords ?? [],
@@ -178,6 +209,15 @@ function scoreTone(score: number): string {
     return "border-[#8a6514] bg-[#fff1bd] text-[#6d4e08]";
   }
   return "border-[#a54538] bg-[#ffe1dc] text-[#7f3026]";
+}
+
+function sameKeywordSet(first: string[], second: string[]): boolean {
+  const normalizedFirst = new Set(first.map((value) => value.trim().toLocaleLowerCase()));
+  const normalizedSecond = new Set(second.map((value) => value.trim().toLocaleLowerCase()));
+  return (
+    normalizedFirst.size === normalizedSecond.size &&
+    [...normalizedFirst].every((value) => normalizedSecond.has(value))
+  );
 }
 
 function Score({
@@ -412,6 +452,7 @@ export default function ApplicationWorkflow({
   const [notice, setNotice] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showQuestions, setShowQuestions] = useState(false);
+  const [showReviewDetails, setShowReviewDetails] = useState(false);
   const [showTailoringComparison, setShowTailoringComparison] = useState(false);
   const [tailoringComparison, setTailoringComparison] =
     useState<TailoredCvComparison | null>(null);
@@ -482,6 +523,21 @@ export default function ApplicationWorkflow({
   const hasReview = draft?.originalAtsScore != null;
   const hasTailoredCv = draft?.tailoredAtsScore != null;
   const hasQuestions = (draft?.interviewQuestions.length ?? 0) > 0;
+  const reviewedRequirementCount =
+    (draft?.originalMatchedKeywords.length ?? 0) +
+    (draft?.originalMissingKeywords.length ?? 0);
+  const hasFixedComparisonBasis = Boolean(
+    draft &&
+      hasTailoredCv &&
+      sameKeywordSet(
+        draft.originalMatchedKeywords,
+        draft.tailoredMatchedKeywords,
+      ) &&
+      sameKeywordSet(
+        draft.originalMissingKeywords,
+        draft.tailoredMissingKeywords,
+      ),
+  );
 
   const activeStep = !hasSource ? 1 : !hasReview ? 2 : !hasTailoredCv ? 3 : 4;
   const cardState = (step: number): "active" | "complete" | "future" => {
@@ -1094,6 +1150,19 @@ export default function ApplicationWorkflow({
                   {draft.originalAtsExplanation}
                 </p>
               ) : null}
+              {draft.originalReviewDetails ? (
+                <button
+                  type="button"
+                  onClick={() => setShowReviewDetails(true)}
+                  className="w-full rounded-md border-2 border-[#172033] bg-white px-3 py-2 text-xs font-black shadow-[2px_2px_0_#172033] hover:bg-[#eef2ff]"
+                >
+                  View detailed CV review
+                </button>
+              ) : (
+                <p className="rounded-md border border-[#d2b36a] bg-[#fff7d9] p-2 text-[11px] leading-4 text-[#6d4e08]">
+                  Run Review again to generate the new section-by-section analysis.
+                </p>
+              )}
             </div>
           ) : (
             <p className="text-xs leading-5">
@@ -1135,6 +1204,17 @@ export default function ApplicationWorkflow({
                   ? "+"
                   : ""}
                 {Math.round((draft.tailoredAtsScore ?? 0) - (draft.originalAtsScore ?? 0))} points
+              </p>
+              <p
+                className={`rounded-md border px-2.5 py-2 text-[11px] leading-4 ${
+                  hasFixedComparisonBasis
+                    ? "border-[#9fb7a5] bg-[#edf7ef] text-[#315f3d]"
+                    : "border-[#d2b36a] bg-[#fff7d9] text-[#6d4e08]"
+                }`}
+              >
+                {hasFixedComparisonBasis
+                  ? `Both scores use the same ${reviewedRequirementCount} reviewed requirements.`
+                  : "This result uses an older scoring basis. Select Tailor again for a fair comparison."}
               </p>
               <KeywordList
                 label="Still unsupported"
@@ -1270,6 +1350,157 @@ export default function ApplicationWorkflow({
           Add application to log
         </button>
       </div>
+
+      {showReviewDetails && draft?.originalReviewDetails ? (
+        <Modal title="Detailed CV review" onClose={() => setShowReviewDetails(false)}>
+          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-bold text-[#626979]">
+                {draft.title} at {draft.company}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-[#626979]">
+                Every match below is connected to factual information from your CV.
+              </p>
+            </div>
+            <div className={`shrink-0 rounded-md border-2 px-4 py-2 ${scoreTone(draft.originalAtsScore ?? 0)}`}>
+              <p className="text-[10px] font-black uppercase tracking-[0.12em]">
+                Total match
+              </p>
+              <p className="text-3xl font-black">
+                {Math.round(draft.originalAtsScore ?? 0)}%
+              </p>
+            </div>
+          </div>
+
+          <section className="mt-6">
+            <h3 className="text-sm font-black uppercase tracking-[0.1em] text-[#172033]">
+              Score breakdown
+            </h3>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {draft.originalReviewDetails.scoreBreakdown.map((component) => {
+                const percentage = Math.min(
+                  100,
+                  Math.max(0, (component.score / component.maxScore) * 100),
+                );
+                return (
+                  <article
+                    key={component.key}
+                    className="rounded-md border-2 border-[#c3c5ca] bg-white p-4"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <h4 className="text-sm font-black">{component.label}</h4>
+                      <p className="shrink-0 text-sm font-black text-[#3157d5]">
+                        {Math.round(component.score * 10) / 10}/{component.maxScore}
+                      </p>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#deded9]">
+                      <div
+                        className="h-full rounded-full bg-[#3157d5]"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    <p className="mt-3 text-xs leading-5 text-[#626979]">
+                      {component.explanation}
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <section className="rounded-md border-2 border-[#8eb69a] bg-[#edf7ef] p-4">
+              <h3 className="text-sm font-black text-[#315f3d]">Verified strengths</h3>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-xs leading-5 text-[#315f3d]">
+                {draft.originalReviewDetails.strengths.map((strength) => (
+                  <li key={strength}>{strength}</li>
+                ))}
+              </ul>
+            </section>
+            <section className="rounded-md border-2 border-[#d2b36a] bg-[#fff7d9] p-4">
+              <h3 className="text-sm font-black text-[#6d4e08]">Priority actions</h3>
+              <ol className="mt-3 list-decimal space-y-2 pl-5 text-xs leading-5 text-[#6d4e08]">
+                {draft.originalReviewDetails.priorityActions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
+              </ol>
+            </section>
+          </div>
+
+          <section className="mt-6">
+            <h3 className="text-sm font-black uppercase tracking-[0.1em] text-[#172033]">
+              Evidence behind matched keywords
+            </h3>
+            {draft.originalReviewDetails.keywordEvidence.length > 0 ? (
+              <div className="mt-3 grid gap-2">
+                {draft.originalReviewDetails.keywordEvidence.map((item) => (
+                  <article
+                    key={`${item.keyword}-${item.section}`}
+                    className="rounded-md border border-[#c3c5ca] bg-white p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded border border-[#8eb69a] bg-[#edf7ef] px-2 py-0.5 text-[11px] font-black text-[#315f3d]">
+                        {item.keyword}
+                      </span>
+                      <span className="text-[10px] font-black uppercase tracking-wide text-[#777b84]">
+                        {item.section}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-[#4f5665]">
+                      “{item.evidenceText}”
+                    </p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 rounded-md border border-[#c3c5ca] bg-white p-3 text-xs text-[#626979]">
+                No displayable evidence excerpts were returned for this review.
+              </p>
+            )}
+          </section>
+
+          <section className="mt-6">
+            <h3 className="text-sm font-black uppercase tracking-[0.1em] text-[#172033]">
+              Section-by-section feedback
+            </h3>
+            <div className="mt-3 grid gap-3">
+              {draft.originalReviewDetails.sectionFeedback.map((section) => (
+                <article
+                  key={section.section}
+                  className="rounded-md border-2 border-[#c3c5ca] bg-white p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-black">{section.section}</h4>
+                    <span
+                      className={`rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wide ${
+                        section.status === "strong"
+                          ? "border-[#8eb69a] bg-[#edf7ef] text-[#315f3d]"
+                          : section.status === "needs_attention"
+                            ? "border-[#d2b36a] bg-[#fff7d9] text-[#6d4e08]"
+                            : "border-[#b8bac0] bg-[#ececea] text-[#626979]"
+                      }`}
+                    >
+                      {section.status.replace("_", " ")}
+                    </span>
+                  </div>
+                  <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-5 text-[#4f5665]">
+                    {section.findings.map((finding) => (
+                      <li key={finding}>{finding}</li>
+                    ))}
+                  </ul>
+                  {section.recommendations.length > 0 ? (
+                    <div className="mt-3 border-l-4 border-[#3157d5] bg-[#eef2ff] px-3 py-2 text-xs leading-5 text-[#33436d]">
+                      {section.recommendations.map((recommendation) => (
+                        <p key={recommendation}>{recommendation}</p>
+                      ))}
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+        </Modal>
+      ) : null}
 
       {showTailoringComparison && tailoringComparison ? (
         <Modal

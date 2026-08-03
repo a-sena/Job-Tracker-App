@@ -7,5 +7,6 @@ public interface ICvTailoringGateway
     Task<GeneratedTailoredCvPackage> GenerateAsync(
         MasterCvContentDto masterCv,
         string jobDescription,
+        CvKeywordBaseline? keywordBaseline,
         CancellationToken cancellationToken = default);
 }
