@@ -32,6 +32,23 @@ internal sealed class ApplicationWorkflowService(
         return draft is null ? null : ToDto(draft);
     }
 
+    public async Task<ApplicationDraftDto?> GetLoggedDraftAsync(
+        Guid jobApplicationId,
+        CancellationToken cancellationToken = default)
+    {
+        if (jobApplicationId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "A job application identifier is required.",
+                nameof(jobApplicationId));
+        }
+
+        var draft = await draftRepository.GetByLoggedJobApplicationIdAsync(
+            jobApplicationId,
+            cancellationToken);
+        return draft is null ? null : ToDto(draft);
+    }
+
     public async Task<ApplicationDraftDto> GetOrCreateDraftAsync(
         Guid userId,
         CancellationToken cancellationToken = default)

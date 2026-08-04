@@ -78,6 +78,15 @@ internal sealed class ApplicationDraftRepository(JobTrackerDbContext dbContext)
         return await query.SingleOrDefaultAsync(draft => draft.Id == id, cancellationToken);
     }
 
+    public Task<ApplicationDraft?> GetByLoggedJobApplicationIdAsync(
+        Guid jobApplicationId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.ApplicationDrafts
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                draft => draft.LoggedJobApplicationId == jobApplicationId,
+                cancellationToken);
+
     public async Task AddAsync(
         ApplicationDraft draft,
         CancellationToken cancellationToken = default) =>

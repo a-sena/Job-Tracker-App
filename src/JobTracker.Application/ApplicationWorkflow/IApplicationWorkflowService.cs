@@ -9,6 +9,10 @@ public interface IApplicationWorkflowService
         Guid userId,
         CancellationToken cancellationToken = default);
 
+    Task<ApplicationDraftDto?> GetLoggedDraftAsync(
+        Guid jobApplicationId,
+        CancellationToken cancellationToken = default);
+
     Task<ApplicationDraftDto> GetOrCreateDraftAsync(
         Guid userId,
         CancellationToken cancellationToken = default);

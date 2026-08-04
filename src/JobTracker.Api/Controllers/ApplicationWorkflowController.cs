@@ -12,6 +12,19 @@ namespace JobTracker.Api.Controllers;
 public sealed class ApplicationWorkflowController(
     IApplicationWorkflowService workflowService) : ControllerBase
 {
+    [HttpGet("logged/{jobApplicationId:guid}")]
+    [ProducesResponseType<ApplicationDraftDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApplicationDraftDto>> GetLoggedDraft(
+        Guid jobApplicationId,
+        CancellationToken cancellationToken)
+    {
+        var draft = await workflowService.GetLoggedDraftAsync(
+            jobApplicationId,
+            cancellationToken);
+        return draft is null ? NotFound() : Ok(draft);
+    }
+
     [HttpGet("draft")]
     [ProducesResponseType<ApplicationDraftDto>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -21,12 +21,51 @@ export interface JobApplication {
   id: string;
   title: string;
   company: string;
+  jobUrl: string;
+  description: string;
+  location: string | null;
   categoryName: string | null;
   appliedDate: string;
   atsMatchScore: number | null;
   missingKeywords: string[];
   tailoredPdfUrl?: string | null;
   status: JobStatus;
+}
+
+interface CvRequirement {
+  keyword: string;
+  category: "required" | "preferred" | "general";
+  status: "matched" | "unsupported";
+  section: string | null;
+  evidenceText: string | null;
+}
+
+interface LoggedApplicationPackage {
+  id: string;
+  originalAtsScore: number | null;
+  originalMatchedKeywords: string[];
+  originalMissingKeywords: string[];
+  originalAtsExplanation: string | null;
+  originalReviewDetails: {
+    strengths: string[];
+    priorityActions: string[];
+    requirements: CvRequirement[];
+    confidence: "high" | "medium" | "low";
+    confidenceExplanation: string;
+  } | null;
+  tailoredAtsScore: number | null;
+  tailoredMatchedKeywords: string[];
+  tailoredMissingKeywords: string[];
+  tailoredPdfFileName: string | null;
+  coverLetter: {
+    language: string;
+    subject: string;
+    paragraphs: string[];
+    evidence: Array<{ claim: string; evidenceText: string }>;
+  } | null;
+  coverLetterPdfFileName: string | null;
+  interviewQuestions: string[];
+  interviewQuestionsPdfFileName: string | null;
 }
 
 export interface JobKanbanBoardProps {
@@ -285,6 +324,15 @@ function isSafePdfUrl(value: string | null | undefined): value is string {
   }
 }
 
+function isSafeExternalUrl(value: string): boolean {
+  try {
+    const parsedUrl = new URL(value);
+    return parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function PdfIcon(): JSX.Element {
   return (
     <svg
@@ -338,6 +386,340 @@ function CloseIcon(): JSX.Element {
   );
 }
 
+function ApplicationDetailsModal({
+  job,
+  applicationPackage,
+  isLoading,
+  error,
+  apiBaseUrl,
+  onClose,
+}: {
+  job: JobApplication;
+  applicationPackage: LoggedApplicationPackage | null;
+  isLoading: boolean;
+  error: string | null;
+  apiBaseUrl: string;
+  onClose: () => void;
+}): JSX.Element {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  const draftId = applicationPackage?.id;
+  const coverLetterPdfUrl =
+    draftId && applicationPackage.coverLetterPdfFileName
+      ? joinApiUrl(
+          apiBaseUrl,
+          `/api/application-workflow/draft/${encodeURIComponent(draftId)}/cover-letter/pdf?download=true`,
+        )
+      : null;
+  const questionsPdfUrl =
+    draftId && applicationPackage.interviewQuestionsPdfFileName
+      ? joinApiUrl(
+          apiBaseUrl,
+          `/api/application-workflow/draft/${encodeURIComponent(draftId)}/interview-questions/pdf?download=true`,
+        )
+      : null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#172033]/70 p-3 sm:p-6"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-details-title"
+        className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-lg border-2 border-[#172033] bg-[#f8f6f0] shadow-[8px_8px_0_#172033]"
+      >
+        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b-2 border-[#172033] bg-[#f8f6f0] p-4 sm:p-6">
+          <div className="min-w-0">
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-[#172033] bg-[#3157d5] px-2.5 py-1 text-[10px] font-black uppercase text-white">
+                {job.status}
+              </span>
+              {job.categoryName ? (
+                <span className="rounded-full border border-[#172033] bg-[#ffcc4d] px-2.5 py-1 text-[10px] font-black uppercase text-[#172033]">
+                  {job.categoryName}
+                </span>
+              ) : null}
+            </div>
+            <h2
+              id="application-details-title"
+              className="mt-3 text-2xl font-black tracking-tight text-[#172033] sm:text-3xl"
+            >
+              {job.title}
+            </h2>
+            <p className="mt-1 text-sm font-bold text-[#626979]">
+              {job.company}
+              {job.location ? ` · ${job.location}` : ""}
+            </p>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border-2 border-[#172033] bg-white hover:bg-[#ffcc4d]"
+            aria-label="Close application details"
+          >
+            <CloseIcon />
+          </button>
+        </header>
+
+        <div className="space-y-5 p-4 sm:p-6">
+          <section className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-md border-2 border-[#c3c5ca] bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-wide text-[#777b84]">
+                Applied
+              </p>
+              <p className="mt-1 text-sm font-black">{formatAppliedDate(job.appliedDate)}</p>
+            </div>
+            <div className="rounded-md border-2 border-[#c3c5ca] bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-wide text-[#777b84]">
+                Current ATS
+              </p>
+              <p className="mt-1 text-sm font-black">
+                {job.atsMatchScore == null ? "Not reviewed" : `${Math.round(job.atsMatchScore)}%`}
+              </p>
+            </div>
+            {isSafeExternalUrl(job.jobUrl) ? (
+              <a
+                href={job.jobUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border-2 border-[#172033] bg-[#eef2ff] p-3 text-sm font-black text-[#3157d5] underline decoration-2 underline-offset-4"
+              >
+                Open original vacancy ↗
+              </a>
+            ) : (
+              <div className="rounded-md border-2 border-[#c3c5ca] bg-white p-3 text-xs font-bold text-[#626979]">
+                Original vacancy link unavailable
+              </div>
+            )}
+          </section>
+
+          <details open className="rounded-md border-2 border-[#172033] bg-white p-4">
+            <summary className="cursor-pointer text-sm font-black uppercase tracking-[0.08em]">
+              Full vacancy description
+            </summary>
+            <div className="mt-4 max-h-96 overflow-y-auto whitespace-pre-wrap border-t border-[#deded9] pt-4 text-sm leading-6 text-[#404658]">
+              {job.description}
+            </div>
+          </details>
+
+          {isLoading ? (
+            <div className="animate-pulse rounded-md border-2 border-[#9ca1ad] bg-white p-5 text-sm font-bold text-[#626979]">
+              Loading saved preparation…
+            </div>
+          ) : error ? (
+            <div role="alert" className="rounded-md border-2 border-[#a54538] bg-[#ffe1dc] p-4 text-sm font-bold text-[#7f3026]">
+              {error}
+            </div>
+          ) : applicationPackage ? (
+            <>
+              <section className="rounded-md border-2 border-[#172033] bg-white p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-lg font-black">ATS review</h3>
+                  {applicationPackage.originalReviewDetails ? (
+                    <span className="rounded-full border border-[#3157d5] bg-[#eef2ff] px-2.5 py-1 text-[10px] font-black uppercase text-[#3157d5]">
+                      {applicationPackage.originalReviewDetails.confidence} confidence
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-md border-2 border-[#d2b36a] bg-[#fff7d9] p-3">
+                    <p className="text-[10px] font-black uppercase text-[#6d4e08]">Original</p>
+                    <p className="mt-1 text-3xl font-black text-[#6d4e08]">
+                      {applicationPackage.originalAtsScore == null
+                        ? "—"
+                        : `${Math.round(applicationPackage.originalAtsScore)}%`}
+                    </p>
+                  </div>
+                  <div className="rounded-md border-2 border-[#8eb69a] bg-[#edf7ef] p-3">
+                    <p className="text-[10px] font-black uppercase text-[#315f3d]">Tailored</p>
+                    <p className="mt-1 text-3xl font-black text-[#315f3d]">
+                      {applicationPackage.tailoredAtsScore == null
+                        ? "—"
+                        : `${Math.round(applicationPackage.tailoredAtsScore)}%`}
+                    </p>
+                  </div>
+                </div>
+                {applicationPackage.originalAtsExplanation ? (
+                  <p className="mt-4 text-sm leading-6 text-[#545b6b]">
+                    {applicationPackage.originalAtsExplanation}
+                  </p>
+                ) : null}
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wide text-[#315f3d]">
+                      Verified matches
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {applicationPackage.originalMatchedKeywords.length ? (
+                        applicationPackage.originalMatchedKeywords.map((keyword) => (
+                          <span key={keyword} className="rounded border border-[#8eb69a] bg-[#edf7ef] px-2 py-1 text-[10px] font-bold text-[#315f3d]">
+                            {keyword}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-[#626979]">No verified matches saved.</span>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wide text-[#8b3d32]">
+                      Remaining gaps
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {(applicationPackage.tailoredAtsScore == null
+                        ? applicationPackage.originalMissingKeywords
+                        : applicationPackage.tailoredMissingKeywords
+                      ).length ? (
+                        (applicationPackage.tailoredAtsScore == null
+                          ? applicationPackage.originalMissingKeywords
+                          : applicationPackage.tailoredMissingKeywords
+                        ).map((keyword) => (
+                          <span key={keyword} className="rounded border border-[#e8b4ab] bg-[#fff1ee] px-2 py-1 text-[10px] font-bold text-[#8b3d32]">
+                            {keyword}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-[#626979]">No unsupported requirements saved.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {applicationPackage.originalReviewDetails ? (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="rounded border border-[#8eb69a] bg-[#edf7ef] p-3">
+                      <p className="text-xs font-black text-[#315f3d]">Strengths</p>
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-[11px] leading-4 text-[#315f3d]">
+                        {(applicationPackage.originalReviewDetails.strengths ?? []).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="rounded border border-[#d2b36a] bg-[#fff7d9] p-3">
+                      <p className="text-xs font-black text-[#6d4e08]">Next actions</p>
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-[11px] leading-4 text-[#6d4e08]">
+                        {(applicationPackage.originalReviewDetails.priorityActions ?? []).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
+                {applicationPackage.originalReviewDetails?.requirements?.length ? (
+                  <div className="mt-4 grid gap-2 md:grid-cols-2">
+                    {applicationPackage.originalReviewDetails.requirements.map((requirement) => (
+                      <article
+                        key={`${requirement.category}-${requirement.keyword}`}
+                        className={`rounded border p-3 ${
+                          requirement.status === "matched"
+                            ? "border-[#8eb69a] bg-[#edf7ef]"
+                            : "border-[#e8b4ab] bg-[#fff1ee]"
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-black">{requirement.keyword}</span>
+                          <span className="text-[9px] font-black uppercase text-[#626979]">
+                            {requirement.category} · {requirement.status}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[11px] leading-4 text-[#626979]">
+                          {requirement.evidenceText ?? "No supporting CV evidence."}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+
+              <section className="grid gap-4 lg:grid-cols-2">
+                <article className="rounded-md border-2 border-[#172033] bg-white p-4">
+                  <h3 className="font-black">Saved documents</h3>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {job.tailoredPdfUrl ? (
+                      <a href={job.tailoredPdfUrl} target="_blank" rel="noreferrer" className="rounded-md border-2 border-[#172033] bg-[#eef2ff] px-3 py-2 text-xs font-black">
+                        Tailored CV PDF
+                      </a>
+                    ) : null}
+                    {coverLetterPdfUrl ? (
+                      <a href={coverLetterPdfUrl} className="rounded-md border-2 border-[#172033] bg-[#ffcc4d] px-3 py-2 text-xs font-black">
+                        Cover letter PDF
+                      </a>
+                    ) : null}
+                    {!job.tailoredPdfUrl && !coverLetterPdfUrl ? (
+                      <p className="text-xs text-[#626979]">No generated documents were saved.</p>
+                    ) : null}
+                  </div>
+                  {applicationPackage.coverLetter ? (
+                    <details className="mt-4 border-t border-[#deded9] pt-3">
+                      <summary className="cursor-pointer text-xs font-black text-[#3157d5]">
+                        Read cover letter
+                      </summary>
+                      <h4 className="mt-3 text-sm font-black">{applicationPackage.coverLetter.subject}</h4>
+                      <div className="mt-3 space-y-3 text-xs leading-5 text-[#545b6b]">
+                        {applicationPackage.coverLetter.paragraphs.map((paragraph, index) => (
+                          <p key={`${index}-${paragraph}`}>{paragraph}</p>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                </article>
+
+                <article className="rounded-md border-2 border-[#172033] bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-black">Interview preparation</h3>
+                    {questionsPdfUrl ? (
+                      <a href={questionsPdfUrl} className="text-xs font-black text-[#3157d5] underline underline-offset-2">
+                        Download PDF
+                      </a>
+                    ) : null}
+                  </div>
+                  {applicationPackage.interviewQuestions.length ? (
+                    <ol className="mt-3 space-y-2">
+                      {applicationPackage.interviewQuestions.map((question, index) => (
+                        <li key={`${index}-${question}`} className="flex gap-2 text-xs leading-5 text-[#4f5665]">
+                          <span className="font-black text-[#3157d5]">{index + 1}.</span>
+                          <span>{question}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="mt-3 text-xs text-[#626979]">
+                      No interview questions were generated for this application.
+                    </p>
+                  )}
+                </article>
+              </section>
+            </>
+          ) : (
+            <div className="rounded-md border-2 border-[#b8bac0] bg-white p-4 text-sm text-[#626979]">
+              This application was saved without an ATS review, tailored CV, cover
+              letter, or interview preparation. The full vacancy is still available above.
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function JobKanbanBoard({
   initialJobs,
   apiBaseUrl = "",
@@ -354,6 +736,11 @@ export function JobKanbanBoard({
     () => new Set(),
   );
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [selectedJob, setSelectedJob] = useState<JobApplication | null>(null);
+  const [applicationPackage, setApplicationPackage] =
+    useState<LoggedApplicationPackage | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
   const requestControllers = useRef(new Map<string, AbortController>());
 
   useEffect(() => {
@@ -537,6 +924,53 @@ export function JobKanbanBoard({
     [onGenerateTailoredCv, tailoringJobIds],
   );
 
+  const closeDetails = useCallback(() => {
+    setSelectedJob(null);
+    setApplicationPackage(null);
+    setDetailsError(null);
+  }, []);
+
+  const openDetails = useCallback(
+    async (job: JobApplication): Promise<void> => {
+      setSelectedJob(job);
+      setApplicationPackage(null);
+      setDetailsError(null);
+      setIsLoadingDetails(true);
+      try {
+        const response = await fetch(
+          joinApiUrl(
+            apiBaseUrl,
+            `/api/application-workflow/logged/${encodeURIComponent(job.id)}`,
+          ),
+          { headers: { Accept: "application/json" } },
+        );
+        if (response.status === 404) {
+          return;
+        }
+        if (!response.ok) {
+          let message = `Application details failed with HTTP ${response.status}.`;
+          try {
+            const problem = (await response.json()) as { detail?: string; title?: string };
+            message = problem.detail || problem.title || message;
+          } catch {
+            // Keep the bounded fallback message when the response is not JSON.
+          }
+          throw new Error(message);
+        }
+        setApplicationPackage((await response.json()) as LoggedApplicationPackage);
+      } catch (loadError) {
+        setDetailsError(
+          loadError instanceof Error
+            ? loadError.message
+            : "The saved application details could not be loaded.",
+        );
+      } finally {
+        setIsLoadingDetails(false);
+      }
+    },
+    [apiBaseUrl],
+  );
+
   return (
     <section aria-label="Job application Kanban board" className="w-full">
       <DragDropContext onDragEnd={handleDragEnd}>
@@ -654,6 +1088,14 @@ export function JobKanbanBoard({
                                   </p>
                                 ) : null}
 
+                                <button
+                                  type="button"
+                                  onClick={() => void openDetails(job)}
+                                  className="mt-3 w-full rounded-md border-2 border-[#172033] bg-[#eef2ff] px-3 py-2 text-xs font-black text-[#3157d5] transition hover:bg-[#ffcc4d] hover:text-[#172033] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3157d5]"
+                                >
+                                  View application details
+                                </button>
+
                                 <div className="mt-4 flex items-center justify-between gap-3 border-t-2 border-[#e5e3dc] pt-3">
                                   <div>
                                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -740,6 +1182,17 @@ export function JobKanbanBoard({
           })}
         </div>
       </DragDropContext>
+
+      {selectedJob ? (
+        <ApplicationDetailsModal
+          job={selectedJob}
+          applicationPackage={applicationPackage}
+          isLoading={isLoadingDetails}
+          error={detailsError}
+          apiBaseUrl={apiBaseUrl}
+          onClose={closeDetails}
+        />
+      ) : null}
 
       {toast ? (
         <div
