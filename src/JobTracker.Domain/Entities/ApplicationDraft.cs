@@ -37,6 +37,9 @@ public sealed class ApplicationDraft
     public string[] TailoredMissingKeywords { get; private set; } = [];
     public byte[]? TailoredPdf { get; private set; }
     public string? TailoredPdfFileName { get; private set; }
+    public string? CoverLetterContent { get; private set; }
+    public byte[]? CoverLetterPdf { get; private set; }
+    public string? CoverLetterPdfFileName { get; private set; }
     public string[] InterviewQuestions { get; private set; } = [];
     public byte[]? InterviewQuestionsPdf { get; private set; }
     public string? InterviewQuestionsPdfFileName { get; private set; }
@@ -139,9 +142,26 @@ public sealed class ApplicationDraft
         TailoredMissingKeywords = Normalize(missingKeywords);
         TailoredPdf = pdf.ToArray();
         TailoredPdfFileName = Required(fileName, nameof(fileName), 255);
+        CoverLetterContent = null;
+        CoverLetterPdf = null;
+        CoverLetterPdfFileName = null;
         InterviewQuestions = [];
         InterviewQuestionsPdf = null;
         InterviewQuestionsPdfFileName = null;
+        Touch();
+    }
+
+    public void SaveCoverLetter(string content, byte[] pdf, string fileName)
+    {
+        EnsureSource();
+        if (pdf.Length == 0)
+        {
+            throw new ArgumentException("The cover-letter PDF cannot be empty.", nameof(pdf));
+        }
+
+        CoverLetterContent = Required(content, nameof(content));
+        CoverLetterPdf = pdf.ToArray();
+        CoverLetterPdfFileName = Required(fileName, nameof(fileName), 255);
         Touch();
     }
 
@@ -200,6 +220,9 @@ public sealed class ApplicationDraft
         TailoredMissingKeywords = [];
         TailoredPdf = null;
         TailoredPdfFileName = null;
+        CoverLetterContent = null;
+        CoverLetterPdf = null;
+        CoverLetterPdfFileName = null;
         InterviewQuestions = [];
         InterviewQuestionsPdf = null;
         InterviewQuestionsPdfFileName = null;

@@ -89,7 +89,16 @@ internal sealed class CvReviewGateway(HttpClient httpClient) : ICvReviewGateway
                     result.Details.KeywordEvidence is null ||
                     result.Details.Strengths is null ||
                     result.Details.PriorityActions is null ||
-                    result.Details.SectionFeedback is null)
+                    result.Details.SectionFeedback is null ||
+                    result.Details.Requirements is null ||
+                    result.Details.Requirements.Count !=
+                        result.MatchedKeywords.Count + result.MissingKeywords.Count ||
+                    result.Details.Requirements.Any(requirement =>
+                        string.IsNullOrWhiteSpace(requirement.Keyword) ||
+                        requirement.Category is not ("required" or "preferred" or "general") ||
+                        requirement.Status is not ("matched" or "unsupported")) ||
+                    result.Details.Confidence is not ("high" or "medium" or "low") ||
+                    string.IsNullOrWhiteSpace(result.Details.ConfidenceExplanation))
                 {
                     throw new ApplicationWorkflowException(
                         "The ATS review service returned an invalid response.",

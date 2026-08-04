@@ -51,6 +51,8 @@ public sealed record ApplicationDraftDto(
     IReadOnlyList<string> TailoredMatchedKeywords,
     IReadOnlyList<string> TailoredMissingKeywords,
     string? TailoredPdfFileName,
+    CoverLetterDto? CoverLetter,
+    string? CoverLetterPdfFileName,
     IReadOnlyList<string> InterviewQuestions,
     string? InterviewQuestionsPdfFileName,
     DateTimeOffset CreatedAt,
@@ -67,4 +69,28 @@ public sealed record DraftPdfDto(byte[] Content, string FileName);
 public sealed record TailoredCvComparisonDto(
     Guid DraftId,
     MasterCvContentDto Original,
-    MasterCvContentDto Tailored);
+    MasterCvContentDto Tailored,
+    IReadOnlyList<TailoredCvChangeDto> Changes);
+
+public sealed record TailoredCvChangeDto(
+    string Id,
+    string Section,
+    string Label,
+    string OriginalText,
+    string TailoredText);
+
+public sealed class ApproveTailoredCvChangesRequest
+{
+    [MaxLength(1_000)]
+    public IReadOnlyList<string> AcceptedChangeIds { get; init; } = [];
+}
+
+public sealed record CoverLetterDto(
+    string Language,
+    string Subject,
+    IReadOnlyList<string> Paragraphs,
+    IReadOnlyList<CoverLetterEvidenceDto> Evidence);
+
+public sealed record CoverLetterEvidenceDto(
+    string Claim,
+    string EvidenceText);

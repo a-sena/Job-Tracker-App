@@ -19,3 +19,13 @@ public interface IInterviewQuestionsGateway
         MasterCvContentDto masterCv,
         CancellationToken cancellationToken = default);
 }
+
+public interface ICoverLetterGateway
+{
+    Task<CoverLetterPackage> GenerateAsync(
+        string jobTitle,
+        string company,
+        string jobDescription,
+        MasterCvContentDto cv,
+        CancellationToken cancellationToken = default);
+}

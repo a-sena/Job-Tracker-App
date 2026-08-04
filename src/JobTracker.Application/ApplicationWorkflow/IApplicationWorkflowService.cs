@@ -34,6 +34,19 @@ public interface IApplicationWorkflowService
         Guid draftId,
         CancellationToken cancellationToken = default);
 
+    Task<ApplicationDraftDto> ApproveTailoredChangesAsync(
+        Guid draftId,
+        ApproveTailoredCvChangesRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<ApplicationDraftDto> GenerateCoverLetterAsync(
+        Guid draftId,
+        CancellationToken cancellationToken = default);
+
+    Task<DraftPdfDto?> GetCoverLetterPdfAsync(
+        Guid draftId,
+        CancellationToken cancellationToken = default);
+
     Task<ApplicationDraftDto> GenerateInterviewQuestionsAsync(
         Guid draftId,
         CancellationToken cancellationToken = default);

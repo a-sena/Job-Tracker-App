@@ -17,7 +17,8 @@ internal sealed class ApplicationWorkflowService(
     ITailoredCvRepository tailoredCvRepository,
     ICvReviewGateway reviewGateway,
     ICvTailoringGateway tailoringGateway,
-    IInterviewQuestionsGateway interviewQuestionsGateway) : IApplicationWorkflowService
+    IInterviewQuestionsGateway interviewQuestionsGateway,
+    ICoverLetterGateway coverLetterGateway) : IApplicationWorkflowService
 {
     private const string UncategorizedName = "Uncategorized";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -172,10 +173,99 @@ internal sealed class ApplicationWorkflowService(
             cancellationToken: cancellationToken)
             ?? throw new ApplicationWorkflowException("The source CV was not found.", 404);
 
+        var original = DeserializeContent(masterCv.Content);
+        var tailored = DeserializeContent(draft.TailoredContent);
         return new TailoredCvComparisonDto(
             draft.Id,
-            DeserializeContent(masterCv.Content),
-            DeserializeContent(draft.TailoredContent));
+            original,
+            tailored,
+            BuildTailoredChanges(original, tailored));
+    }
+
+    public async Task<ApplicationDraftDto> ApproveTailoredChangesAsync(
+        Guid draftId,
+        ApproveTailoredCvChangesRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var draft = await GetRequiredDraftAsync(draftId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(draft.TailoredContent))
+        {
+            throw new ApplicationWorkflowException("Tailor the CV before approving changes.", 409);
+        }
+
+        var (_, original) = await GetDraftCvAsync(draft, cancellationToken);
+        var proposed = DeserializeContent(draft.TailoredContent);
+        var validIds = BuildTailoredChanges(original, proposed)
+            .Select(change => change.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var acceptedIds = request.AcceptedChangeIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (acceptedIds.Length != request.AcceptedChangeIds.Count ||
+            acceptedIds.Any(id => !validIds.Contains(id)))
+        {
+            throw new ApplicationWorkflowException(
+                "The selected CV changes are invalid or stale. Reload the comparison.",
+                400);
+        }
+
+        var generated = await tailoringGateway.FinalizeAsync(
+            original,
+            proposed,
+            acceptedIds,
+            RequireDescription(draft),
+            new CvKeywordBaseline(
+                draft.OriginalMatchedKeywords,
+                draft.OriginalMissingKeywords),
+            cancellationToken);
+        ValidateGrounding(original, generated.TailoredContent);
+        draft.SaveTailoredCv(
+            JsonSerializer.Serialize(generated.TailoredContent, JsonOptions),
+            generated.AtsMatchScore,
+            generated.MatchedKeywords,
+            generated.MissingKeywords,
+            generated.PdfContent,
+            generated.PdfFileName);
+        await draftRepository.SaveChangesAsync(cancellationToken);
+        return ToDto(draft);
+    }
+
+    public async Task<ApplicationDraftDto> GenerateCoverLetterAsync(
+        Guid draftId,
+        CancellationToken cancellationToken = default)
+    {
+        var draft = await GetRequiredDraftAsync(draftId, cancellationToken);
+        var (_, original) = await GetDraftCvAsync(draft, cancellationToken);
+        var cv = string.IsNullOrWhiteSpace(draft.TailoredContent)
+            ? original
+            : DeserializeContent(draft.TailoredContent);
+        var package = await coverLetterGateway.GenerateAsync(
+            draft.JobTitle!,
+            draft.Company!,
+            RequireDescription(draft),
+            cv,
+            cancellationToken);
+        draft.SaveCoverLetter(
+            JsonSerializer.Serialize(package.Letter, JsonOptions),
+            package.PdfContent,
+            package.PdfFileName);
+        await draftRepository.SaveChangesAsync(cancellationToken);
+        return ToDto(draft);
+    }
+
+    public async Task<DraftPdfDto?> GetCoverLetterPdfAsync(
+        Guid draftId,
+        CancellationToken cancellationToken = default)
+    {
+        var draft = await draftRepository.GetByIdAsync(draftId, cancellationToken: cancellationToken);
+        return draft?.CoverLetterPdf is null ||
+            string.IsNullOrWhiteSpace(draft.CoverLetterPdfFileName)
+            ? null
+            : new DraftPdfDto(
+                draft.CoverLetterPdf.ToArray(),
+                draft.CoverLetterPdfFileName);
     }
 
     public async Task<ApplicationDraftDto> GenerateInterviewQuestionsAsync(
@@ -403,6 +493,72 @@ internal sealed class ApplicationWorkflowService(
             ? draft.JobDescription
             : throw new ApplicationWorkflowException("Complete the source stage first.", 409);
 
+    private static IReadOnlyList<TailoredCvChangeDto> BuildTailoredChanges(
+        MasterCvContentDto original,
+        MasterCvContentDto tailored)
+    {
+        var changes = new List<TailoredCvChangeDto>();
+        if (!SameText(original.ProfessionalSummary, tailored.ProfessionalSummary))
+        {
+            changes.Add(new TailoredCvChangeDto(
+                "summary",
+                "Professional summary",
+                "Professional summary",
+                original.ProfessionalSummary,
+                tailored.ProfessionalSummary));
+        }
+
+        for (var experienceIndex = 0;
+             experienceIndex < Math.Min(original.WorkExperience.Count, tailored.WorkExperience.Count);
+             experienceIndex++)
+        {
+            var source = original.WorkExperience[experienceIndex];
+            var candidate = tailored.WorkExperience[experienceIndex];
+            for (var bulletIndex = 0;
+                 bulletIndex < Math.Min(source.BulletPoints.Count, candidate.BulletPoints.Count);
+                 bulletIndex++)
+            {
+                if (SameText(source.BulletPoints[bulletIndex], candidate.BulletPoints[bulletIndex]))
+                {
+                    continue;
+                }
+
+                changes.Add(new TailoredCvChangeDto(
+                    $"experience:{experienceIndex}:bullet:{bulletIndex}",
+                    "Work experience",
+                    $"{source.JobTitle} at {source.Company} · bullet {bulletIndex + 1}",
+                    source.BulletPoints[bulletIndex],
+                    candidate.BulletPoints[bulletIndex]));
+            }
+        }
+
+        for (var projectIndex = 0;
+             projectIndex < Math.Min(original.Projects.Count, tailored.Projects.Count);
+             projectIndex++)
+        {
+            var source = original.Projects[projectIndex];
+            var candidate = tailored.Projects[projectIndex];
+            for (var bulletIndex = 0;
+                 bulletIndex < Math.Min(source.BulletPoints.Count, candidate.BulletPoints.Count);
+                 bulletIndex++)
+            {
+                if (SameText(source.BulletPoints[bulletIndex], candidate.BulletPoints[bulletIndex]))
+                {
+                    continue;
+                }
+
+                changes.Add(new TailoredCvChangeDto(
+                    $"project:{projectIndex}:bullet:{bulletIndex}",
+                    "Projects",
+                    $"{source.Name} · bullet {bulletIndex + 1}",
+                    source.BulletPoints[bulletIndex],
+                    candidate.BulletPoints[bulletIndex]));
+            }
+        }
+
+        return changes;
+    }
+
     private static void ValidateGrounding(
         MasterCvContentDto source,
         MasterCvContentDto tailored)
@@ -563,6 +719,8 @@ internal sealed class ApplicationWorkflowService(
             draft.TailoredMatchedKeywords,
             draft.TailoredMissingKeywords,
             draft.TailoredPdfFileName,
+            DeserializeCoverLetter(draft.CoverLetterContent),
+            draft.CoverLetterPdfFileName,
             draft.InterviewQuestions,
             draft.InterviewQuestionsPdfFileName,
             draft.CreatedAt,
@@ -578,6 +736,23 @@ internal sealed class ApplicationWorkflowService(
         try
         {
             return JsonSerializer.Deserialize<CvReviewDetailsDto>(content, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static CoverLetterDto? DeserializeCoverLetter(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<CoverLetterDto>(content, JsonOptions);
         }
         catch (JsonException)
         {

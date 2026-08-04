@@ -5,7 +5,10 @@ public sealed record CvReviewDetailsDto(
     IReadOnlyList<CvKeywordEvidenceDto> KeywordEvidence,
     IReadOnlyList<string> Strengths,
     IReadOnlyList<string> PriorityActions,
-    IReadOnlyList<CvSectionFeedbackDto> SectionFeedback);
+    IReadOnlyList<CvSectionFeedbackDto> SectionFeedback,
+    IReadOnlyList<CvRequirementDto> Requirements,
+    string Confidence,
+    string ConfidenceExplanation);
 
 public sealed record CvScoreComponentDto(
     string Key,
@@ -24,3 +27,10 @@ public sealed record CvSectionFeedbackDto(
     string Status,
     IReadOnlyList<string> Findings,
     IReadOnlyList<string> Recommendations);
+
+public sealed record CvRequirementDto(
+    string Keyword,
+    string Category,
+    string Status,
+    string? Section,
+    string? EvidenceText);

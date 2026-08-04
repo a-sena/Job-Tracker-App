@@ -13,3 +13,8 @@ public sealed record InterviewQuestionsPackage(
     IReadOnlyList<string> Questions,
     byte[] PdfContent,
     string PdfFileName);
+
+public sealed record CoverLetterPackage(
+    CoverLetterDto Letter,
+    byte[] PdfContent,
+    string PdfFileName);

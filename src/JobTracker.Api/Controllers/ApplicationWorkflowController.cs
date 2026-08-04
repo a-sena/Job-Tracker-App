@@ -97,6 +97,40 @@ public sealed class ApplicationWorkflowController(
         }
     }
 
+    [HttpPost("draft/{id:guid}/tailored-cv/approve")]
+    public Task<ActionResult<ApplicationDraftDto>> ApproveTailoredCvChanges(
+        Guid id,
+        [FromBody] ApproveTailoredCvChangesRequest request,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(() => workflowService.ApproveTailoredChangesAsync(
+            id,
+            request,
+            cancellationToken));
+
+    [HttpPost("draft/{id:guid}/cover-letter")]
+    public Task<ActionResult<ApplicationDraftDto>> GenerateCoverLetter(
+        Guid id,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(() => workflowService.GenerateCoverLetterAsync(id, cancellationToken));
+
+    [HttpGet("draft/{id:guid}/cover-letter/pdf")]
+    [Produces("application/pdf")]
+    public async Task<IActionResult> GetCoverLetterPdf(
+        Guid id,
+        [FromQuery] bool download = true,
+        CancellationToken cancellationToken = default)
+    {
+        var pdf = await workflowService.GetCoverLetterPdfAsync(id, cancellationToken);
+        if (pdf is null)
+        {
+            return NotFound();
+        }
+
+        return download
+            ? File(pdf.Content, "application/pdf", pdf.FileName, enableRangeProcessing: true)
+            : File(pdf.Content, "application/pdf", enableRangeProcessing: true);
+    }
+
     [HttpPost("draft/{id:guid}/interview-questions")]
     public Task<ActionResult<ApplicationDraftDto>> GenerateInterviewQuestions(
         Guid id,

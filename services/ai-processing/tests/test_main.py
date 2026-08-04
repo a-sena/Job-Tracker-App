@@ -7,6 +7,9 @@ import pytest
 
 from app.main import (
     AiOutputError,
+    CoverLetterPackageRequest,
+    CoverLetterResult,
+    FinalizeTailoredCvRequest,
     JobExtractionError,
     GenerateTailoredCvRequest,
     InterviewQuestionsPackageRequest,
@@ -15,6 +18,7 @@ from app.main import (
     TailoringResult,
     app,
     build_ats_review_prompt,
+    build_cover_letter_prompt,
     build_interview_questions_prompt,
     build_tailoring_prompt,
     calculate_ats_score,
@@ -22,11 +26,13 @@ from app.main import (
     extract_master_cv_from_pdf_with_openai,
     extract_master_cv_with_openai,
     extract_text_from_pdf,
+    finalize_tailored_document,
     generate_interview_questions_package,
     generate_interview_questions_with_openai,
     generate_tailored_cv_package,
     prioritize_skills,
     render_interview_questions_html,
+    render_cover_letter_html,
     review_cv_with_openai,
     render_cv_html,
     source_cv_document,
@@ -930,3 +936,93 @@ def test_extract_job_details_returns_warnings_for_missing_fields() -> None:
 async def test_job_extraction_rejects_local_network_url() -> None:
     with pytest.raises(JobExtractionError, match="Private or local"):
         await validate_public_job_url("http://127.0.0.1/job")
+
+
+def test_finalize_tailored_document_applies_only_selected_generated_changes() -> None:
+    source_request = make_request()
+    proposal = validate_and_merge_tailoring(
+        source_request.master_cv,
+        make_tailoring(),
+        source_request.job_description,
+    )
+    request = FinalizeTailoredCvRequest.model_validate(
+        {
+            "masterCv": source_request.master_cv.model_dump(),
+            "proposedCv": proposal.model_dump(),
+            "acceptedChangeIds": ["summary", "experience:0:bullet:1"],
+            "jobDescription": source_request.job_description,
+            "keywordBaseline": {
+                "matchedKeywords": ["C#", "PostgreSQL", "APIs"],
+                "missingKeywords": ["Kubernetes", "distributed systems"],
+            },
+        }
+    )
+
+    finalized = finalize_tailored_document(request)
+
+    assert finalized.professional_summary == proposal.professional_summary
+    assert (
+        finalized.work_experience[0].bullet_points[0]
+        == source_request.master_cv.work_experience[0].bullet_points[0]
+    )
+    assert (
+        finalized.work_experience[0].bullet_points[1]
+        == proposal.work_experience[0].bullet_points[1]
+    )
+
+
+def test_finalize_tailored_document_rejects_unknown_change_id() -> None:
+    source_request = make_request()
+    proposal = validate_and_merge_tailoring(
+        source_request.master_cv,
+        make_tailoring(),
+        source_request.job_description,
+    )
+    request = FinalizeTailoredCvRequest.model_validate(
+        {
+            "masterCv": source_request.master_cv.model_dump(),
+            "proposedCv": proposal.model_dump(),
+            "acceptedChangeIds": ["invented:change"],
+            "jobDescription": source_request.job_description,
+            "keywordBaseline": {
+                "matchedKeywords": ["C#"],
+                "missingKeywords": ["Kubernetes"],
+            },
+        }
+    )
+
+    with pytest.raises(AiOutputError, match="invalid or stale"):
+        finalize_tailored_document(request)
+
+
+def test_cover_letter_prompt_and_template_keep_inputs_bounded_and_escaped() -> None:
+    request = CoverLetterPackageRequest.model_validate(
+        {
+            "jobTitle": "Backend Engineer",
+            "company": "Example <AS>",
+            "jobDescription": make_request().job_description,
+            "cv": make_request("Ada <Lovelace>").master_cv.model_dump(),
+        }
+    )
+    result = CoverLetterResult(
+        language="English",
+        subject="Application for Backend Engineer",
+        paragraphs=[
+            "I am applying for the role.",
+            "My CV documents C# API and PostgreSQL experience.",
+            "I would welcome a conversation about the position.",
+        ],
+        evidence=[
+            {
+                "claim": "C# API experience",
+                "evidenceText": "Built REST APIs in C#.",
+            }
+        ],
+    )
+
+    prompt = build_cover_letter_prompt(request)
+    html = render_cover_letter_html(request, result)
+
+    assert "only supported facts" in prompt
+    assert "Example &lt;AS&gt;" in html
+    assert "Ada &lt;Lovelace&gt;" in html

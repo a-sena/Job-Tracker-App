@@ -74,6 +74,12 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(120);
         });
 
+        services.AddHttpClient<ICoverLetterGateway, CoverLetterGateway>(client =>
+        {
+            client.BaseAddress = new Uri(aiProcessingBaseUrl, UriKind.Absolute);
+            client.Timeout = TimeSpan.FromSeconds(120);
+        });
+
         return services;
     }
 }

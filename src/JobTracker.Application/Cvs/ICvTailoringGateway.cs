@@ -9,4 +9,12 @@ public interface ICvTailoringGateway
         string jobDescription,
         CvKeywordBaseline? keywordBaseline,
         CancellationToken cancellationToken = default);
+
+    Task<GeneratedTailoredCvPackage> FinalizeAsync(
+        MasterCvContentDto masterCv,
+        MasterCvContentDto proposedCv,
+        IReadOnlyList<string> acceptedChangeIds,
+        string jobDescription,
+        CvKeywordBaseline keywordBaseline,
+        CancellationToken cancellationToken = default);
 }

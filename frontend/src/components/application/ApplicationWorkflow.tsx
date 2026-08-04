@@ -36,6 +36,8 @@ export interface ApplicationDraft {
   tailoredMatchedKeywords: string[];
   tailoredMissingKeywords: string[];
   tailoredPdfFileName: string | null;
+  coverLetter: CoverLetter | null;
+  coverLetterPdfFileName: string | null;
   interviewQuestions: string[];
   interviewQuestionsPdfFileName: string | null;
   createdAt: string;
@@ -69,6 +71,24 @@ interface CvReviewDetails {
   strengths: string[];
   priorityActions: string[];
   sectionFeedback: CvSectionFeedback[];
+  requirements: CvRequirement[];
+  confidence: "high" | "medium" | "low";
+  confidenceExplanation: string;
+}
+
+interface CvRequirement {
+  keyword: string;
+  category: "required" | "preferred" | "general";
+  status: "matched" | "unsupported";
+  section: string | null;
+  evidenceText: string | null;
+}
+
+interface CoverLetter {
+  language: string;
+  subject: string;
+  paragraphs: string[];
+  evidence: Array<{ claim: string; evidenceText: string }>;
 }
 
 interface ApplicationCategory {
@@ -99,6 +119,15 @@ interface TailoredCvComparison {
   draftId: string;
   original: ComparisonCv;
   tailored: ComparisonCv;
+  changes: TailoredCvChange[];
+}
+
+interface TailoredCvChange {
+  id: string;
+  section: string;
+  label: string;
+  originalText: string;
+  tailoredText: string;
 }
 
 interface ExtractedJob {
@@ -129,6 +158,8 @@ type BusyAction =
   | "review"
   | "tailor"
   | "comparison"
+  | "approval"
+  | "coverLetter"
   | "questions"
   | "log"
   | null;
@@ -185,6 +216,21 @@ async function request<T>(
 }
 
 function normalizeDraft(draft: ApplicationDraft): ApplicationDraft {
+  const reviewDetails = draft.originalReviewDetails
+    ? {
+        ...draft.originalReviewDetails,
+        scoreBreakdown: draft.originalReviewDetails.scoreBreakdown ?? [],
+        keywordEvidence: draft.originalReviewDetails.keywordEvidence ?? [],
+        strengths: draft.originalReviewDetails.strengths ?? [],
+        priorityActions: draft.originalReviewDetails.priorityActions ?? [],
+        sectionFeedback: draft.originalReviewDetails.sectionFeedback ?? [],
+        requirements: draft.originalReviewDetails.requirements ?? [],
+        confidence: draft.originalReviewDetails.confidence ?? "low",
+        confidenceExplanation:
+          draft.originalReviewDetails.confidenceExplanation ??
+          "Run the CV review again to calculate confidence for this analysis.",
+      }
+    : null;
   return {
     ...draft,
     ...EMPTY_DRAFT_ARRAYS,
@@ -192,7 +238,8 @@ function normalizeDraft(draft: ApplicationDraft): ApplicationDraft {
     title: draft.title ?? "",
     company: draft.company ?? "",
     description: draft.description ?? "",
-    originalReviewDetails: draft.originalReviewDetails ?? null,
+    originalReviewDetails: reviewDetails,
+    coverLetter: draft.coverLetter ?? null,
     originalMatchedKeywords: draft.originalMatchedKeywords ?? [],
     originalMissingKeywords: draft.originalMissingKeywords ?? [],
     tailoredMatchedKeywords: draft.tailoredMatchedKeywords ?? [],
@@ -456,6 +503,8 @@ export default function ApplicationWorkflow({
   const [showTailoringComparison, setShowTailoringComparison] = useState(false);
   const [tailoringComparison, setTailoringComparison] =
     useState<TailoredCvComparison | null>(null);
+  const [acceptedChangeIds, setAcceptedChangeIds] = useState<Set<string>>(new Set());
+  const [showCoverLetter, setShowCoverLetter] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [categories, setCategories] = useState<ApplicationCategory[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
@@ -563,12 +612,69 @@ export default function ApplicationWorkflow({
         `/api/application-workflow/draft/${encodeURIComponent(draft.id)}/tailored-cv/comparison`,
       );
       setTailoringComparison(comparison);
+      setAcceptedChangeIds(new Set(comparison.changes.map((change) => change.id)));
       setShowTailoringComparison(true);
     } catch (comparisonError) {
       setError(
         comparisonError instanceof Error
           ? comparisonError.message
           : "The CV changes could not be loaded.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function approveTailoredChanges(): Promise<void> {
+    if (!draft || !tailoringComparison) return;
+    setBusy("approval");
+    setError(null);
+    try {
+      const updated = await request<ApplicationDraft>(
+        apiBaseUrl,
+        `/api/application-workflow/draft/${encodeURIComponent(draft.id)}/tailored-cv/approve`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ acceptedChangeIds: [...acceptedChangeIds] }),
+        },
+      );
+      setDraft(normalizeDraft(updated));
+      setTailoringComparison(null);
+      setShowTailoringComparison(false);
+      setNotice(
+        `${acceptedChangeIds.size} of ${tailoringComparison.changes.length} CV changes applied.`,
+      );
+    } catch (approvalError) {
+      setError(
+        approvalError instanceof Error
+          ? approvalError.message
+          : "The selected CV changes could not be applied.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function generateCoverLetter(): Promise<void> {
+    if (!draft) return;
+    setBusy("coverLetter");
+    setError(null);
+    try {
+      const updated = await request<ApplicationDraft>(
+        apiBaseUrl,
+        `/api/application-workflow/draft/${encodeURIComponent(draft.id)}/cover-letter`,
+        { method: "POST" },
+      );
+      const normalized = normalizeDraft(updated);
+      setDraft(normalized);
+      setShowCoverLetter(true);
+      setNotice("Your factual, vacancy-specific cover letter is ready.");
+    } catch (coverLetterError) {
+      setError(
+        coverLetterError instanceof Error
+          ? coverLetterError.message
+          : "The cover letter could not be generated.",
       );
     } finally {
       setBusy(null);
@@ -1333,6 +1439,57 @@ export default function ApplicationWorkflow({
         </StepCard>
       </div>
 
+      <section className="mt-5 rounded-lg border-2 border-[#172033] bg-[#f3f5ff] p-4 shadow-[4px_4px_0_#3157d5]">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#3157d5]">
+              Application document
+            </p>
+            <h2 className="mt-1 text-lg font-black text-[#172033]">
+              Vacancy-specific cover letter
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-[#626979]">
+              Generate a concise letter in the vacancy language. Every candidate
+              claim must be supported by the selected CV.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {draft?.coverLetter ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowCoverLetter(true)}
+                  className="rounded-md border-2 border-[#172033] bg-white px-3 py-2 text-xs font-black"
+                >
+                  Preview letter
+                </button>
+                <a
+                  href={apiUrl(
+                    apiBaseUrl,
+                    `/api/application-workflow/draft/${encodeURIComponent(draft.id)}/cover-letter/pdf?download=true`,
+                  )}
+                  className="rounded-md border-2 border-[#172033] bg-white px-3 py-2 text-xs font-black"
+                >
+                  Download PDF
+                </a>
+              </>
+            ) : null}
+            <button
+              type="button"
+              disabled={!hasSource || busy === "coverLetter"}
+              onClick={() => void generateCoverLetter()}
+              className="rounded-md border-2 border-[#172033] bg-[#3157d5] px-4 py-2 text-xs font-black text-white shadow-[2px_2px_0_#ffcc4d] disabled:cursor-not-allowed disabled:bg-[#a8abb3] disabled:shadow-none"
+            >
+              {busy === "coverLetter"
+                ? "Writing…"
+                : draft?.coverLetter
+                  ? "Regenerate letter"
+                  : "Create cover letter"}
+            </button>
+          </div>
+        </div>
+      </section>
+
       <div className="mt-5 flex flex-col items-start justify-between gap-3 rounded-lg border-2 border-[#172033] bg-white p-4 shadow-[4px_4px_0_#172033] sm:flex-row sm:items-center">
         <div>
           <p className="text-sm font-black text-[#172033]">Ready to track this role?</p>
@@ -1371,6 +1528,55 @@ export default function ApplicationWorkflow({
               </p>
             </div>
           </div>
+
+          <section className="mt-5 rounded-md border-2 border-[#9ca1ad] bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-black text-[#172033]">Review confidence</h3>
+              <span className="rounded-full border border-[#3157d5] bg-[#eef2ff] px-2.5 py-1 text-[10px] font-black uppercase text-[#3157d5]">
+                {draft.originalReviewDetails.confidence}
+              </span>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-[#626979]">
+              {draft.originalReviewDetails.confidenceExplanation}
+            </p>
+          </section>
+
+          <section className="mt-6">
+            <h3 className="text-sm font-black uppercase tracking-[0.1em] text-[#172033]">
+              Vacancy requirements
+            </h3>
+            <div className="mt-3 overflow-hidden rounded-md border-2 border-[#c3c5ca] bg-white">
+              {draft.originalReviewDetails.requirements.map((requirement) => (
+                <article
+                  key={`${requirement.category}-${requirement.keyword}`}
+                  className="border-b border-[#deded9] p-3 last:border-b-0"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-black text-[#172033]">
+                      {requirement.keyword}
+                    </span>
+                    <span className="rounded-full border border-[#9ca1ad] bg-[#f3f3ef] px-2 py-0.5 text-[9px] font-black uppercase text-[#626979]">
+                      {requirement.category}
+                    </span>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${
+                        requirement.status === "matched"
+                          ? "border-[#8eb69a] bg-[#edf7ef] text-[#315f3d]"
+                          : "border-[#e8b4ab] bg-[#fff1ee] text-[#8b3d32]"
+                      }`}
+                    >
+                      {requirement.status}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-5 text-[#626979]">
+                    {requirement.evidenceText
+                      ? `${requirement.section}: “${requirement.evidenceText}”`
+                      : "No factual evidence was found in the uploaded CV, so this requirement remains unsupported."}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </section>
 
           <section className="mt-6">
             <h3 className="text-sm font-black uppercase tracking-[0.1em] text-[#172033]">
@@ -1511,6 +1717,73 @@ export default function ApplicationWorkflow({
             Facts, employers, projects, tools, and dates stay locked. Only the
             summary and existing evidence bullets may be rephrased.
           </p>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border-2 border-[#3157d5] bg-[#eef2ff] p-3">
+            <p className="text-xs font-bold text-[#33436d]">
+              {acceptedChangeIds.size} of {tailoringComparison.changes.length} changes selected
+            </p>
+            <div className="flex gap-3 text-xs font-black">
+              <button
+                type="button"
+                onClick={() =>
+                  setAcceptedChangeIds(
+                    new Set(tailoringComparison.changes.map((change) => change.id)),
+                  )
+                }
+                className="text-[#3157d5] underline underline-offset-2"
+              >
+                Accept all
+              </button>
+              <button
+                type="button"
+                onClick={() => setAcceptedChangeIds(new Set())}
+                className="text-[#8b3d32] underline underline-offset-2"
+              >
+                Reject all
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            {tailoringComparison.changes.map((change) => {
+              const accepted = acceptedChangeIds.has(change.id);
+              return (
+                <label
+                  key={change.id}
+                  className={`block cursor-pointer rounded-md border-2 p-4 ${
+                    accepted
+                      ? "border-[#3157d5] bg-[#f3f5ff]"
+                      : "border-[#b8bac0] bg-white"
+                  }`}
+                >
+                  <span className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={accepted}
+                      onChange={() =>
+                        setAcceptedChangeIds((current) => {
+                          const next = new Set(current);
+                          if (next.has(change.id)) next.delete(change.id);
+                          else next.add(change.id);
+                          return next;
+                        })
+                      }
+                      className="mt-1 h-4 w-4 accent-[#3157d5]"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[10px] font-black uppercase tracking-wide text-[#626979]">
+                        {change.section} · {change.label}
+                      </span>
+                      <span className="mt-2 block rounded border border-[#e8b4ab] bg-[#fff1ee] p-2 text-xs leading-5 text-[#7f3026] line-through decoration-[#a54538]">
+                        {change.originalText}
+                      </span>
+                      <span className="mt-2 block rounded border border-[#8eb69a] bg-[#edf7ef] p-2 text-xs leading-5 text-[#315f3d]">
+                        {change.tailoredText}
+                      </span>
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <section className="rounded-md border-2 border-[#b8bac0] bg-white p-4">
               <h3 className="text-xs font-black uppercase tracking-[0.12em] text-[#626979]">
@@ -1573,6 +1846,74 @@ export default function ApplicationWorkflow({
               </section>
             );
           })}
+          <div className="sticky bottom-0 mt-6 border-t-2 border-[#172033] bg-[#f8f6f0] pt-4">
+            <button
+              type="button"
+              disabled={busy === "approval"}
+              onClick={() => void approveTailoredChanges()}
+              className="w-full rounded-md border-2 border-[#172033] bg-[#3157d5] px-4 py-3 text-sm font-black text-white shadow-[3px_3px_0_#ffcc4d] disabled:opacity-60"
+            >
+              {busy === "approval"
+                ? "Applying selection…"
+                : `Apply ${acceptedChangeIds.size} selected changes`}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+
+      {showCoverLetter && draft?.coverLetter ? (
+        <Modal title="Cover letter preview" onClose={() => setShowCoverLetter(false)}>
+          <div className="mt-4 rounded-md border-2 border-[#c3c5ca] bg-white p-5 sm:p-7">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#3157d5]">
+              {draft.coverLetter.language}
+            </p>
+            <h3 className="mt-2 text-xl font-black text-[#172033]">
+              {draft.coverLetter.subject}
+            </h3>
+            <p className="mt-1 text-xs font-bold text-[#626979]">
+              {draft.title} · {draft.company}
+            </p>
+            <div className="mt-5 space-y-4 text-sm leading-7 text-[#303747]">
+              {draft.coverLetter.paragraphs.map((paragraph, index) => (
+                <p key={`${index}-${paragraph}`}>{paragraph}</p>
+              ))}
+            </div>
+            <details className="mt-6 rounded-md border border-[#8eb69a] bg-[#edf7ef] p-3">
+              <summary className="cursor-pointer text-xs font-black text-[#315f3d]">
+                Verified CV evidence used ({draft.coverLetter.evidence?.length ?? 0})
+              </summary>
+              <ul className="mt-3 space-y-2 text-xs leading-5 text-[#315f3d]">
+                {(draft.coverLetter.evidence ?? []).map((item) => (
+                  <li key={`${item.claim}-${item.evidenceText}`}>
+                    <span className="font-black">{item.claim}:</span>{" "}
+                    “{item.evidenceText}”
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a
+              href={apiUrl(
+                apiBaseUrl,
+                `/api/application-workflow/draft/${encodeURIComponent(draft.id)}/cover-letter/pdf?download=false`,
+              )}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border-2 border-[#172033] bg-white px-4 py-2.5 text-sm font-black"
+            >
+              Open PDF
+            </a>
+            <a
+              href={apiUrl(
+                apiBaseUrl,
+                `/api/application-workflow/draft/${encodeURIComponent(draft.id)}/cover-letter/pdf?download=true`,
+              )}
+              className="rounded-md border-2 border-[#172033] bg-[#ffcc4d] px-4 py-2.5 text-sm font-black shadow-[2px_2px_0_#172033]"
+            >
+              Download PDF
+            </a>
+          </div>
         </Modal>
       ) : null}
 

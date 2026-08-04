@@ -52,6 +52,12 @@ internal sealed class ApplicationDraftConfiguration
             .HasColumnName("tailored_pdf").HasColumnType("bytea");
         builder.Property(draft => draft.TailoredPdfFileName)
             .HasColumnName("tailored_pdf_file_name").HasMaxLength(255);
+        builder.Property(draft => draft.CoverLetterContent)
+            .HasColumnName("cover_letter_content").HasColumnType("jsonb");
+        builder.Property(draft => draft.CoverLetterPdf)
+            .HasColumnName("cover_letter_pdf").HasColumnType("bytea");
+        builder.Property(draft => draft.CoverLetterPdfFileName)
+            .HasColumnName("cover_letter_pdf_file_name").HasMaxLength(255);
         builder.Property(draft => draft.InterviewQuestions)
             .HasColumnName("interview_questions").HasColumnType("jsonb").IsRequired();
         builder.Property(draft => draft.InterviewQuestionsPdf)
