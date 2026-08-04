@@ -24,5 +24,7 @@ public interface IApplicationDraftRepository
 
     Task AddAsync(ApplicationDraft draft, CancellationToken cancellationToken = default);
 
+    void Remove(ApplicationDraft draft);
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

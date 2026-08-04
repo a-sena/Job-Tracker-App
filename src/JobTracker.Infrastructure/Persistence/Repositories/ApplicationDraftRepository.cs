@@ -92,6 +92,9 @@ internal sealed class ApplicationDraftRepository(JobTrackerDbContext dbContext)
         CancellationToken cancellationToken = default) =>
         await dbContext.ApplicationDrafts.AddAsync(draft, cancellationToken);
 
+    public void Remove(ApplicationDraft draft) =>
+        dbContext.ApplicationDrafts.Remove(draft);
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
         dbContext.SaveChangesAsync(cancellationToken);
 

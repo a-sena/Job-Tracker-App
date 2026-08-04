@@ -7,7 +7,8 @@ namespace JobTracker.Application.Jobs;
 
 internal sealed class JobApplicationService(
     IJobApplicationRepository repository,
-    ITailoredCvRepository tailoredCvRepository) : IJobApplicationService
+    ITailoredCvRepository tailoredCvRepository,
+    IApplicationDraftRepository draftRepository) : IJobApplicationService
 {
     public async Task<IReadOnlyList<JobApplicationDto>> GetAllAsync(
         Guid userId,
@@ -110,6 +111,14 @@ internal sealed class JobApplicationService(
         if (jobApplication is null)
         {
             return false;
+        }
+
+        var completedDraft = await draftRepository.GetByLoggedJobApplicationIdAsync(
+            jobApplication.Id,
+            cancellationToken);
+        if (completedDraft is not null)
+        {
+            draftRepository.Remove(completedDraft);
         }
 
         repository.Remove(jobApplication);

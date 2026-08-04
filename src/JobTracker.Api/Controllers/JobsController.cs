@@ -183,7 +183,7 @@ public sealed class JobsController(
     }
 
     /// <summary>
-    /// Permanently removes a tracked job application and its tailored CVs.
+    /// Permanently removes a tracked application, tailored CVs, and saved preparation artifacts.
     /// </summary>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

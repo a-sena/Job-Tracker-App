@@ -91,6 +91,8 @@ export interface JobKanbanBoardProps {
    * rollback-style toast on the card.
    */
   onGenerateTailoredCv?: (jobId: string) => Promise<void>;
+  /** Invoked after an application and its saved preparation were deleted. */
+  onApplicationDeleted?: (jobId: string) => void;
 }
 
 type JobsByStatus = Record<JobStatus, JobApplication[]>;
@@ -392,6 +394,8 @@ function ApplicationDetailsModal({
   isLoading,
   error,
   apiBaseUrl,
+  isDeleting,
+  onDelete,
   onClose,
 }: {
   job: JobApplication;
@@ -399,6 +403,8 @@ function ApplicationDetailsModal({
   isLoading: boolean;
   error: string | null;
   apiBaseUrl: string;
+  isDeleting: boolean;
+  onDelete: () => void;
   onClose: () => void;
 }): JSX.Element {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -714,6 +720,26 @@ function ApplicationDetailsModal({
               letter, or interview preparation. The full vacancy is still available above.
             </div>
           )}
+
+          <section className="rounded-md border-2 border-[#e8b4ab] bg-[#fff1ee] p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-black text-[#7f3026]">Delete application</h3>
+                <p className="mt-1 text-xs leading-5 text-[#8b3d32]">
+                  Removes the Kanban card and its saved CV, cover-letter, ATS, and
+                  interview-preparation artifacts. This cannot be undone.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={onDelete}
+                className="shrink-0 rounded-md border-2 border-[#7f3026] bg-[#d84d3d] px-4 py-2.5 text-xs font-black text-white disabled:cursor-wait disabled:opacity-60"
+              >
+                {isDeleting ? "Deleting…" : "Delete application"}
+              </button>
+            </div>
+          </section>
         </div>
       </section>
     </div>
@@ -725,6 +751,7 @@ export function JobKanbanBoard({
   apiBaseUrl = "",
   onStatusChangeConfirmed,
   onGenerateTailoredCv,
+  onApplicationDeleted,
 }: JobKanbanBoardProps): JSX.Element {
   const [jobsByStatus, setJobsByStatus] = useState<JobsByStatus>(() =>
     createBoard(initialJobs),
@@ -741,6 +768,9 @@ export function JobKanbanBoard({
     useState<LoggedApplicationPackage | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [deletingJobIds, setDeletingJobIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const requestControllers = useRef(new Map<string, AbortController>());
 
   useEffect(() => {
@@ -971,6 +1001,60 @@ export function JobKanbanBoard({
     [apiBaseUrl],
   );
 
+  const deleteApplication = useCallback(
+    async (job: JobApplication): Promise<void> => {
+      const confirmed = window.confirm(
+        `Delete “${job.title}” at ${job.company}?\n\nThis also removes its saved ATS review, tailored CV, cover letter, and interview questions. This cannot be undone.`,
+      );
+      if (!confirmed || deletingJobIds.has(job.id)) return;
+
+      setDeletingJobIds((current) => new Set(current).add(job.id));
+      setDetailsError(null);
+      try {
+        const response = await fetch(
+          joinApiUrl(apiBaseUrl, `/api/jobs/${encodeURIComponent(job.id)}`),
+          { method: "DELETE", headers: { Accept: "application/json" } },
+        );
+        if (!response.ok) {
+          let message = `Delete failed with HTTP ${response.status}.`;
+          try {
+            const problem = (await response.json()) as { detail?: string; title?: string };
+            message = problem.detail || problem.title || message;
+          } catch {
+            // Keep the fallback when an intermediary returns a non-JSON body.
+          }
+          throw new Error(message);
+        }
+
+        setJobsByStatus((current) => ({
+          Applied: current.Applied.filter((item) => item.id !== job.id),
+          Interviewing: current.Interviewing.filter((item) => item.id !== job.id),
+          Offer: current.Offer.filter((item) => item.id !== job.id),
+          Rejected: current.Rejected.filter((item) => item.id !== job.id),
+        }));
+        closeDetails();
+        onApplicationDeleted?.(job.id);
+        setToast({
+          id: Date.now(),
+          message: `“${job.title}” and its saved preparation were deleted.`,
+        });
+      } catch (deleteError) {
+        setDetailsError(
+          deleteError instanceof Error
+            ? deleteError.message
+            : "The application could not be deleted.",
+        );
+      } finally {
+        setDeletingJobIds((current) => {
+          const next = new Set(current);
+          next.delete(job.id);
+          return next;
+        });
+      }
+    },
+    [apiBaseUrl, closeDetails, deletingJobIds, onApplicationDeleted],
+  );
+
   return (
     <section aria-label="Job application Kanban board" className="w-full">
       <DragDropContext onDragEnd={handleDragEnd}>
@@ -1190,6 +1274,8 @@ export function JobKanbanBoard({
           isLoading={isLoadingDetails}
           error={detailsError}
           apiBaseUrl={apiBaseUrl}
+          isDeleting={deletingJobIds.has(selectedJob.id)}
+          onDelete={() => void deleteApplication(selectedJob)}
           onClose={closeDetails}
         />
       ) : null}

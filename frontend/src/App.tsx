@@ -187,6 +187,11 @@ export default function App(): JSX.Element {
     );
   }
 
+  function handleApplicationDeleted(jobId: string) {
+    setJobs((currentJobs) => currentJobs.filter((job) => job.id !== jobId));
+    setBoardRevision((revision) => revision + 1);
+  }
+
   return (
     <div className="min-h-screen bg-[#f3f0e8] text-[#172033]">
       <header className="sticky top-0 z-40 border-b-2 border-[#172033] bg-white">
@@ -403,6 +408,7 @@ export default function App(): JSX.Element {
               initialJobs={boardJobs}
               apiBaseUrl={API_BASE_URL}
               onStatusChangeConfirmed={handleStatusConfirmed}
+              onApplicationDeleted={handleApplicationDeleted}
             />
           )}
         </section>
