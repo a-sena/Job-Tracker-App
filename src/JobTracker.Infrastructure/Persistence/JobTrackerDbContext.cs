@@ -1,5 +1,6 @@
 using JobTracker.Domain.Entities;
 using JobTracker.Infrastructure.Identity;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -7,8 +8,10 @@ using Microsoft.EntityFrameworkCore;
 namespace JobTracker.Infrastructure.Persistence;
 
 public sealed class JobTrackerDbContext(DbContextOptions<JobTrackerDbContext> options)
-    : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options)
+    : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>(options), IDataProtectionKeyContext
 {
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+
     public DbSet<JobApplication> JobApplications => Set<JobApplication>();
 
     public DbSet<MasterCv> MasterCvs => Set<MasterCv>();
@@ -23,6 +26,14 @@ public sealed class JobTrackerDbContext(DbContextOptions<JobTrackerDbContext> op
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(JobTrackerDbContext).Assembly);
+
+        modelBuilder.Entity<DataProtectionKey>(builder =>
+        {
+            builder.ToTable("data_protection_keys");
+            builder.Property(key => key.Id).HasColumnName("id");
+            builder.Property(key => key.FriendlyName).HasColumnName("friendly_name");
+            builder.Property(key => key.Xml).HasColumnName("xml");
+        });
 
         modelBuilder.Entity<AppUser>(builder =>
         {

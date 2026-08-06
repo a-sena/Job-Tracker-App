@@ -26,9 +26,12 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("JobTrackerDatabase")
-            ?? throw new InvalidOperationException(
+        var connectionString = configuration.GetConnectionString("JobTrackerDatabase");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
                 "Connection string 'JobTrackerDatabase' is not configured.");
+        }
 
         var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
         dataSourceBuilder.EnableDynamicJson([typeof(string[])]);
@@ -63,7 +66,7 @@ public static class DependencyInjection
             .AddDefaultTokenProviders();
         services.ConfigureApplicationCookie(options =>
         {
-            options.Cookie.Name = "JobTracker.Auth";
+            options.Cookie.Name = "Rolevya.Auth";
             options.Cookie.HttpOnly = true;
             options.Cookie.SameSite = SameSiteMode.Strict;
             options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
@@ -94,9 +97,12 @@ public static class DependencyInjection
             provider.GetRequiredService<StripeBillingService>());
         services.AddScoped<IMembershipService, MembershipService>();
 
-        var aiProcessingBaseUrl = configuration["Services:AiProcessing:BaseUrl"]
-            ?? throw new InvalidOperationException(
+        var aiProcessingBaseUrl = configuration["Services:AiProcessing:BaseUrl"];
+        if (string.IsNullOrWhiteSpace(aiProcessingBaseUrl))
+        {
+            throw new InvalidOperationException(
                 "Configuration value 'Services:AiProcessing:BaseUrl' is missing.");
+        }
 
         services.AddHttpClient<IJobExtractionService, JobExtractionService>(client =>
         {

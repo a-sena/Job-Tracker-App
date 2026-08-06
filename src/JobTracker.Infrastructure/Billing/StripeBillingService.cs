@@ -243,7 +243,7 @@ internal sealed class StripeBillingService(
         if (!Guid.TryParse(userIdText, out var userId))
         {
             throw new BillingException(
-                "The completed Checkout Session is missing its JobFlow user reference.",
+                "The completed Checkout Session is missing its Rolevya user reference.",
                 400);
         }
 
@@ -297,7 +297,7 @@ internal sealed class StripeBillingService(
         if (user is null)
         {
             throw new BillingException(
-                "The Stripe subscription could not be matched to a JobFlow account.",
+                "The Stripe subscription could not be matched to a Rolevya account.",
                 404);
         }
 

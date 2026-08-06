@@ -92,8 +92,8 @@ export default function AuthPage({
       <section className="relative hidden overflow-hidden border-r-2 border-[#172033] bg-[#3157d5] p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full border-[42px] border-[#ffcc4d] opacity-95" />
         <div className="relative flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-md border-2 border-white bg-[#172033] text-lg font-black shadow-[4px_4px_0_#ffcc4d]">J</span>
-          <span className="text-xl font-black">JobFlow</span>
+          <span className="flex h-11 w-11 items-center justify-center rounded-md border-2 border-white bg-[#172033] text-lg font-black shadow-[4px_4px_0_#ffcc4d]">R</span>
+          <span className="text-xl font-black">Rolevya</span>
         </div>
         <div className="relative max-w-2xl pb-12">
           <p className="mb-5 text-xs font-black uppercase tracking-[0.2em] text-[#ffdc78]">Your application workspace</p>
@@ -110,8 +110,8 @@ export default function AuthPage({
       <section className="flex items-center justify-center px-5 py-10 sm:px-10">
         <div className="w-full max-w-md">
           <div className="mb-10 flex items-center gap-3 lg:hidden">
-            <span className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-[#172033] bg-[#3157d5] font-black text-white shadow-[3px_3px_0_#ffcc4d]">J</span>
-            <span className="text-xl font-black">JobFlow</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-[#172033] bg-[#3157d5] font-black text-white shadow-[3px_3px_0_#ffcc4d]">R</span>
+            <span className="text-xl font-black">Rolevya</span>
           </div>
 
           <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c84736]">

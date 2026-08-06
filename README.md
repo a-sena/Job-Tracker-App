@@ -1,4 +1,4 @@
-# Job Tracker App
+# Rolevya
 
 A full-stack job application workspace with a React Kanban board, a .NET 8 Clean
 Architecture API, PostgreSQL persistence, and a FastAPI service for secure vacancy
@@ -57,8 +57,8 @@ letter; manual application tracking remains unlimited. Successful generations co
 an allowance, while failed AI requests release it. The Founding Member offer is shown
 at $8 USD per month or $80 USD per year with 40 monthly AI actions. Planned
 regular prices are $10 USD per month and $100 USD per year.
-Checkout remains disabled until a real payment provider is configured, so the UI never
-pretends that an account has been upgraded or charges a card without confirmation.
+Checkout is enabled only when all Stripe settings are present. Stripe-hosted Checkout
+collects the payment details; Rolevya never receives or stores full card numbers.
 
 The FastAPI service requires a local
 `services/ai-processing/.env` containing `OPENAI_API_KEY` before it starts.
@@ -182,17 +182,17 @@ If `dotnet-ef` is already installed, update it instead:
 dotnet tool update --global dotnet-ef --version 8.0.29
 ```
 
-Commit generated migrations to source control. In production, apply reviewed
-migrations in the deployment pipeline rather than calling `Database.Migrate()` at
-application startup.
+Commit generated migrations to source control. The production container applies
+reviewed migrations at startup while holding a PostgreSQL advisory lock, preventing
+two replicas from migrating the database concurrently.
 
 ## Configure Stripe subscriptions
 
-JobFlow uses Stripe-hosted Checkout for card collection, signed webhooks for
+Rolevya uses Stripe-hosted Checkout for card collection, signed webhooks for
 membership activation, and the Stripe Customer Portal for cancellation and billing
-management. Full card numbers never pass through the JobFlow API.
+management. Full card numbers never pass through the Rolevya API.
 
-In Stripe test mode, create one product named `JobFlow Founding Member` with two
+In Stripe test mode, create one product named `Rolevya Founding Member` with two
 recurring USD prices:
 
 - Monthly: `$8.00 USD`, recurring every month
@@ -236,6 +236,9 @@ Production values should be supplied through environment variables such as
 `Stripe__SecretKey`, `Stripe__WebhookSecret`, `Stripe__MonthlyPriceId`, and
 `Stripe__AnnualPriceId`. Configure VAT/tax behaviour in Stripe with an accountant
 before accepting live payments.
+
+The complete Railway, Namecheap DNS, and production Stripe checklist is in
+[`docs/deployment/railway.md`](docs/deployment/railway.md).
 
 ## Run the API
 

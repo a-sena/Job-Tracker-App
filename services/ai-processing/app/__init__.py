@@ -1,1 +1,1 @@
-"""Job Tracker AI processing service."""
+"""Rolevya AI processing service."""

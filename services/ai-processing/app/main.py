@@ -583,7 +583,7 @@ class JobExtractionError(RuntimeError):
 SCRAPER_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/126.0 Safari/537.36 JobTracker/1.0"
+    "Chrome/126.0 Safari/537.36 Rolevya/1.0"
 )
 MAX_SCRAPER_REDIRECTS = 4
 
@@ -3783,7 +3783,7 @@ async def generate_cover_letter_artifacts(
 
 
 app = FastAPI(
-    title="Job Tracker AI Processing Service",
+    title="Rolevya AI Processing Service",
     version="1.0.0",
     description="Truth-grounded CV tailoring and PDF generation.",
     lifespan=lifespan,

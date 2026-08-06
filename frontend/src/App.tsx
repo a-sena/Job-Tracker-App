@@ -279,13 +279,13 @@ export default function App(): JSX.Element {
     <div className="min-h-screen bg-[#f3f0e8] text-[#172033]">
       <header className="sticky top-0 z-40 border-b border-[#e4e1da] bg-white/95 backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] max-w-[1600px] items-center justify-between px-4 sm:px-6 lg:px-8">
-          <a href="#application-studio" className="group flex items-center gap-3" aria-label="JobFlow home">
+          <a href="#application-studio" className="group flex items-center gap-3" aria-label="Rolevya home">
             <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-[#172033] text-base font-black text-white shadow-sm transition group-hover:-translate-y-0.5">
-              J
+              R
               <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-[#ffcc4d]" />
             </span>
             <span className="hidden sm:block">
-              <span className="block text-[17px] font-black tracking-[-0.025em]">JobFlow</span>
+              <span className="block text-[17px] font-black tracking-[-0.025em]">Rolevya</span>
               <span className="block text-[10px] font-semibold tracking-wide text-[#7a808d]">APPLICATION WORKSPACE</span>
             </span>
           </a>

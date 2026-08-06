@@ -366,7 +366,7 @@ export default function MembershipDialog({
               </div>
 
               <p className="mt-6 text-center text-xs font-semibold leading-5 text-[#747a88]">
-                Card details are entered only on Stripe Checkout. JobFlow never receives or stores your full card number.
+                Card details are entered only on Stripe Checkout. Rolevya never receives or stores your full card number.
               </p>
             </>
           ) : null}

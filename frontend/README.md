@@ -1,4 +1,4 @@
-# Job Tracker Frontend
+# Rolevya Frontend
 
 React 18, TypeScript, TailwindCSS, and `@hello-pangea/dnd` frontend for the
 application tracker.
