@@ -1,10 +1,12 @@
 using JobTracker.Application.ApplicationWorkflow;
 using JobTracker.Application.ApplicationWorkflow.Dtos;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JobTracker.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/application-categories")]
 [Produces("application/json")]
 public sealed class ApplicationCategoriesController(

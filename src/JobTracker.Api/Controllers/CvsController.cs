@@ -1,10 +1,12 @@
 using JobTracker.Application.Cvs;
 using JobTracker.Application.Cvs.Dtos;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JobTracker.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/cvs")]
 [Produces("application/json")]
 public sealed class CvsController(ISavedCvService savedCvService) : ControllerBase

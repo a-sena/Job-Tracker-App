@@ -1,5 +1,6 @@
 using System.Text.Json;
 using JobTracker.Application.Abstractions.Persistence;
+using JobTracker.Application.Authentication;
 using JobTracker.Application.Cvs.Dtos;
 using JobTracker.Domain.Entities;
 
@@ -7,7 +8,8 @@ namespace JobTracker.Application.Cvs;
 
 internal sealed class SavedCvService(
     IMasterCvRepository masterCvRepository,
-    IMasterCvImportGateway importGateway) : ISavedCvService
+    IMasterCvImportGateway importGateway,
+    ICurrentUser currentUser) : ISavedCvService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -15,7 +17,7 @@ internal sealed class SavedCvService(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        EnsureUserId(userId);
+        currentUser.EnsureOwns(userId);
         var cvs = await masterCvRepository.GetAllByUserIdAsync(userId, cancellationToken: cancellationToken);
         return cvs.Select(ToDto).ToArray();
     }
@@ -28,7 +30,7 @@ internal sealed class SavedCvService(
         string contentType,
         CancellationToken cancellationToken = default)
     {
-        EnsureUserId(userId);
+        currentUser.EnsureOwns(userId);
         ArgumentNullException.ThrowIfNull(pdfContent);
         if (pdfContent.Length == 0)
         {
@@ -80,7 +82,7 @@ internal sealed class SavedCvService(
         CancellationToken cancellationToken = default)
     {
         var cv = await masterCvRepository.GetByIdAsync(id, asTracking: true, cancellationToken);
-        if (cv is null)
+        if (cv is null || cv.UserId != currentUser.UserId)
         {
             return null;
         }
@@ -94,6 +96,12 @@ internal sealed class SavedCvService(
         Guid id,
         CancellationToken cancellationToken = default)
     {
+        var existing = await masterCvRepository.GetByIdAsync(id, cancellationToken: cancellationToken);
+        if (existing is null || existing.UserId != currentUser.UserId)
+        {
+            return null;
+        }
+
         var selected = await masterCvRepository.SetDefaultAsync(id, cancellationToken);
         return selected is null ? null : ToDto(selected);
     }
@@ -103,7 +111,7 @@ internal sealed class SavedCvService(
         CancellationToken cancellationToken = default)
     {
         var cv = await masterCvRepository.GetByIdAsync(id, asTracking: true, cancellationToken);
-        if (cv is null)
+        if (cv is null || cv.UserId != currentUser.UserId)
         {
             return false;
         }
@@ -136,11 +144,4 @@ internal sealed class SavedCvService(
     private static SavedCvDto ToDto(MasterCv cv) =>
         new(cv.Id, cv.UserId, cv.Name, cv.OriginalFileName, cv.IsDefault, cv.CreatedAt, cv.UpdatedAt);
 
-    private static void EnsureUserId(Guid userId)
-    {
-        if (userId == Guid.Empty)
-        {
-            throw new ArgumentException("A user identifier is required.", nameof(userId));
-        }
-    }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "../../lib/apiClient";
 
 export interface WorkExperience {
   company: string;
@@ -315,8 +316,9 @@ export default function MasterCvEditor({
       const formData = new FormData();
       formData.append("file", file, file.name);
 
-      const response = await fetch(
-        `${apiBaseUrl.replace(/\/+$/, "")}/api/master-cvs/import-pdf`,
+      const response = await apiFetch(
+        apiBaseUrl,
+        "/api/master-cvs/import-pdf",
         {
           method: "POST",
           headers: { Accept: "application/json" },
@@ -358,8 +360,9 @@ export default function MasterCvEditor({
     setIsSaving(true);
 
     try {
-      const response = await fetch(
-        `${apiBaseUrl.replace(/\/+$/, "")}/api/master-cvs/${encodeURIComponent(userId)}`,
+      const response = await apiFetch(
+        apiBaseUrl,
+        `/api/master-cvs/${encodeURIComponent(userId)}`,
         {
           method: "PUT",
           headers: {

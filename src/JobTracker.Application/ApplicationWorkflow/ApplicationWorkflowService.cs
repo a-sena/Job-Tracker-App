@@ -1,10 +1,12 @@
 using System.Text.Json;
 using JobTracker.Application.Abstractions.Persistence;
+using JobTracker.Application.Authentication;
 using JobTracker.Application.ApplicationWorkflow.Dtos;
 using JobTracker.Application.Cvs;
 using JobTracker.Application.Cvs.Dtos;
 using JobTracker.Application.Jobs.Dtos;
 using JobTracker.Application.Jobs.Mappings;
+using JobTracker.Application.Membership;
 using JobTracker.Domain.Entities;
 
 namespace JobTracker.Application.ApplicationWorkflow;
@@ -18,7 +20,9 @@ internal sealed class ApplicationWorkflowService(
     ICvReviewGateway reviewGateway,
     ICvTailoringGateway tailoringGateway,
     IInterviewQuestionsGateway interviewQuestionsGateway,
-    ICoverLetterGateway coverLetterGateway) : IApplicationWorkflowService
+    ICoverLetterGateway coverLetterGateway,
+    IMembershipService membershipService,
+    ICurrentUser currentUser) : IApplicationWorkflowService
 {
     private const string UncategorizedName = "Uncategorized";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -27,7 +31,7 @@ internal sealed class ApplicationWorkflowService(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        EnsureUserId(userId);
+        currentUser.EnsureOwns(userId);
         var draft = await draftRepository.GetActiveByUserIdAsync(userId, cancellationToken: cancellationToken);
         return draft is null ? null : ToDto(draft);
     }
@@ -46,14 +50,14 @@ internal sealed class ApplicationWorkflowService(
         var draft = await draftRepository.GetByLoggedJobApplicationIdAsync(
             jobApplicationId,
             cancellationToken);
-        return draft is null ? null : ToDto(draft);
+        return draft is null || draft.UserId != currentUser.UserId ? null : ToDto(draft);
     }
 
     public async Task<ApplicationDraftDto> GetOrCreateDraftAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        EnsureUserId(userId);
+        currentUser.EnsureOwns(userId);
         var draft = await draftRepository.GetOrCreateActiveAsync(userId, cancellationToken);
         return ToDto(draft);
     }
@@ -97,69 +101,81 @@ internal sealed class ApplicationWorkflowService(
         Guid draftId,
         CancellationToken cancellationToken = default)
     {
-        var draft = await GetRequiredDraftAsync(draftId, cancellationToken);
-        var (masterCv, content) = await GetDraftCvAsync(draft, cancellationToken);
-        _ = masterCv;
+        return await UseAiActionAsync(
+            AiFeature.CvReview,
+            async () =>
+            {
+                var draft = await GetRequiredDraftAsync(draftId, cancellationToken);
+                var (masterCv, content) = await GetDraftCvAsync(draft, cancellationToken);
+                _ = masterCv;
 
-        var result = await reviewGateway.ReviewAsync(
-            content,
-            RequireDescription(draft),
+                var result = await reviewGateway.ReviewAsync(
+                    content,
+                    RequireDescription(draft),
+                    cancellationToken);
+                try
+                {
+                    draft.SaveReview(
+                        result.AtsMatchScore,
+                        result.MatchedKeywords,
+                        result.MissingKeywords,
+                        result.Explanation,
+                        JsonSerializer.Serialize(result.Details, JsonOptions));
+                }
+                catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+                {
+                    throw new ApplicationWorkflowException(exception.Message, 409, exception);
+                }
+
+                await draftRepository.SaveChangesAsync(cancellationToken);
+                return ToDto(draft);
+            },
             cancellationToken);
-        try
-        {
-            draft.SaveReview(
-                result.AtsMatchScore,
-                result.MatchedKeywords,
-                result.MissingKeywords,
-                result.Explanation,
-                JsonSerializer.Serialize(result.Details, JsonOptions));
-        }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
-        {
-            throw new ApplicationWorkflowException(exception.Message, 409, exception);
-        }
-
-        await draftRepository.SaveChangesAsync(cancellationToken);
-        return ToDto(draft);
     }
 
     public async Task<ApplicationDraftDto> TailorAsync(
         Guid draftId,
         CancellationToken cancellationToken = default)
     {
-        var draft = await GetRequiredDraftAsync(draftId, cancellationToken);
-        if (!draft.OriginalAtsScore.HasValue)
-        {
-            throw new ApplicationWorkflowException("Review the original CV before tailoring it.", 409);
-        }
+        return await UseAiActionAsync(
+            AiFeature.CvTailoring,
+            async () =>
+            {
+                var draft = await GetRequiredDraftAsync(draftId, cancellationToken);
+                if (!draft.OriginalAtsScore.HasValue)
+                {
+                    throw new ApplicationWorkflowException("Review the original CV before tailoring it.", 409);
+                }
 
-        var (_, originalContent) = await GetDraftCvAsync(draft, cancellationToken);
-        var generated = await tailoringGateway.GenerateAsync(
-            originalContent,
-            RequireDescription(draft),
-            new CvKeywordBaseline(
-                draft.OriginalMatchedKeywords,
-                draft.OriginalMissingKeywords),
+                var (_, originalContent) = await GetDraftCvAsync(draft, cancellationToken);
+                var generated = await tailoringGateway.GenerateAsync(
+                    originalContent,
+                    RequireDescription(draft),
+                    new CvKeywordBaseline(
+                        draft.OriginalMatchedKeywords,
+                        draft.OriginalMissingKeywords),
+                    cancellationToken);
+                ValidateGrounding(originalContent, generated.TailoredContent);
+
+                try
+                {
+                    draft.SaveTailoredCv(
+                        JsonSerializer.Serialize(generated.TailoredContent, JsonOptions),
+                        generated.AtsMatchScore,
+                        generated.MatchedKeywords,
+                        generated.MissingKeywords,
+                        generated.PdfContent,
+                        generated.PdfFileName);
+                }
+                catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+                {
+                    throw new ApplicationWorkflowException(exception.Message, 409, exception);
+                }
+
+                await draftRepository.SaveChangesAsync(cancellationToken);
+                return ToDto(draft);
+            },
             cancellationToken);
-        ValidateGrounding(originalContent, generated.TailoredContent);
-
-        try
-        {
-            draft.SaveTailoredCv(
-                JsonSerializer.Serialize(generated.TailoredContent, JsonOptions),
-                generated.AtsMatchScore,
-                generated.MatchedKeywords,
-                generated.MissingKeywords,
-                generated.PdfContent,
-                generated.PdfFileName);
-        }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
-        {
-            throw new ApplicationWorkflowException(exception.Message, 409, exception);
-        }
-
-        await draftRepository.SaveChangesAsync(cancellationToken);
-        return ToDto(draft);
     }
 
     public async Task<DraftPdfDto?> GetTailoredPdfAsync(
@@ -167,7 +183,8 @@ internal sealed class ApplicationWorkflowService(
         CancellationToken cancellationToken = default)
     {
         var draft = await draftRepository.GetByIdAsync(draftId, cancellationToken: cancellationToken);
-        return draft?.TailoredPdf is null || string.IsNullOrWhiteSpace(draft.TailoredPdfFileName)
+        return draft is null || draft.UserId != currentUser.UserId ||
+            draft.TailoredPdf is null || string.IsNullOrWhiteSpace(draft.TailoredPdfFileName)
             ? null
             : new DraftPdfDto(draft.TailoredPdf.ToArray(), draft.TailoredPdfFileName);
     }
@@ -180,6 +197,7 @@ internal sealed class ApplicationWorkflowService(
             draftId,
             cancellationToken: cancellationToken)
             ?? throw new ApplicationWorkflowException("The application draft was not found.", 404);
+        EnsureDraftOwnership(draft);
         if (!draft.MasterCvId.HasValue || string.IsNullOrWhiteSpace(draft.TailoredContent))
         {
             throw new ApplicationWorkflowException("Tailor the CV before reviewing changes.", 409);
@@ -253,23 +271,29 @@ internal sealed class ApplicationWorkflowService(
         Guid draftId,
         CancellationToken cancellationToken = default)
     {
-        var draft = await GetRequiredDraftAsync(draftId, cancellationToken);
-        var (_, original) = await GetDraftCvAsync(draft, cancellationToken);
-        var cv = string.IsNullOrWhiteSpace(draft.TailoredContent)
-            ? original
-            : DeserializeContent(draft.TailoredContent);
-        var package = await coverLetterGateway.GenerateAsync(
-            draft.JobTitle!,
-            draft.Company!,
-            RequireDescription(draft),
-            cv,
+        return await UseAiActionAsync(
+            AiFeature.CoverLetter,
+            async () =>
+            {
+                var draft = await GetRequiredDraftAsync(draftId, cancellationToken);
+                var (_, original) = await GetDraftCvAsync(draft, cancellationToken);
+                var cv = string.IsNullOrWhiteSpace(draft.TailoredContent)
+                    ? original
+                    : DeserializeContent(draft.TailoredContent);
+                var package = await coverLetterGateway.GenerateAsync(
+                    draft.JobTitle!,
+                    draft.Company!,
+                    RequireDescription(draft),
+                    cv,
+                    cancellationToken);
+                draft.SaveCoverLetter(
+                    JsonSerializer.Serialize(package.Letter, JsonOptions),
+                    package.PdfContent,
+                    package.PdfFileName);
+                await draftRepository.SaveChangesAsync(cancellationToken);
+                return ToDto(draft);
+            },
             cancellationToken);
-        draft.SaveCoverLetter(
-            JsonSerializer.Serialize(package.Letter, JsonOptions),
-            package.PdfContent,
-            package.PdfFileName);
-        await draftRepository.SaveChangesAsync(cancellationToken);
-        return ToDto(draft);
     }
 
     public async Task<DraftPdfDto?> GetCoverLetterPdfAsync(
@@ -277,7 +301,7 @@ internal sealed class ApplicationWorkflowService(
         CancellationToken cancellationToken = default)
     {
         var draft = await draftRepository.GetByIdAsync(draftId, cancellationToken: cancellationToken);
-        return draft?.CoverLetterPdf is null ||
+        return draft is null || draft.UserId != currentUser.UserId || draft.CoverLetterPdf is null ||
             string.IsNullOrWhiteSpace(draft.CoverLetterPdfFileName)
             ? null
             : new DraftPdfDto(
@@ -289,33 +313,39 @@ internal sealed class ApplicationWorkflowService(
         Guid draftId,
         CancellationToken cancellationToken = default)
     {
-        var draft = await GetRequiredDraftAsync(draftId, cancellationToken);
-        if (draft.TailoredPdf is null)
-        {
-            throw new ApplicationWorkflowException("Tailor the CV before generating interview questions.", 409);
-        }
+        return await UseAiActionAsync(
+            AiFeature.InterviewQuestions,
+            async () =>
+            {
+                var draft = await GetRequiredDraftAsync(draftId, cancellationToken);
+                if (draft.TailoredPdf is null)
+                {
+                    throw new ApplicationWorkflowException("Tailor the CV before generating interview questions.", 409);
+                }
 
-        var (_, content) = await GetDraftCvAsync(draft, cancellationToken);
-        var package = await interviewQuestionsGateway.GenerateAsync(
-            draft.JobTitle!,
-            draft.Company!,
-            RequireDescription(draft),
-            content,
+                var (_, content) = await GetDraftCvAsync(draft, cancellationToken);
+                var package = await interviewQuestionsGateway.GenerateAsync(
+                    draft.JobTitle!,
+                    draft.Company!,
+                    RequireDescription(draft),
+                    content,
+                    cancellationToken);
+                try
+                {
+                    draft.SaveInterviewQuestions(
+                        package.Questions,
+                        package.PdfContent,
+                        package.PdfFileName);
+                }
+                catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+                {
+                    throw new ApplicationWorkflowException(exception.Message, 409, exception);
+                }
+
+                await draftRepository.SaveChangesAsync(cancellationToken);
+                return ToDto(draft);
+            },
             cancellationToken);
-        try
-        {
-            draft.SaveInterviewQuestions(
-                package.Questions,
-                package.PdfContent,
-                package.PdfFileName);
-        }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
-        {
-            throw new ApplicationWorkflowException(exception.Message, 409, exception);
-        }
-
-        await draftRepository.SaveChangesAsync(cancellationToken);
-        return ToDto(draft);
     }
 
     public async Task<DraftPdfDto?> GetInterviewQuestionsPdfAsync(
@@ -323,7 +353,7 @@ internal sealed class ApplicationWorkflowService(
         CancellationToken cancellationToken = default)
     {
         var draft = await draftRepository.GetByIdAsync(draftId, cancellationToken: cancellationToken);
-        return draft?.InterviewQuestionsPdf is null ||
+        return draft is null || draft.UserId != currentUser.UserId || draft.InterviewQuestionsPdf is null ||
             string.IsNullOrWhiteSpace(draft.InterviewQuestionsPdfFileName)
             ? null
             : new DraftPdfDto(
@@ -401,7 +431,7 @@ internal sealed class ApplicationWorkflowService(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        EnsureUserId(userId);
+        currentUser.EnsureOwns(userId);
         var categories = await categoryRepository.GetAllByUserIdAsync(userId, cancellationToken);
         return categories
             .Select(category => new ApplicationCategoryDto(
@@ -424,6 +454,8 @@ internal sealed class ApplicationWorkflowService(
         {
             throw new ApplicationWorkflowException("The application draft was not found.", 404);
         }
+
+        EnsureDraftOwnership(draft);
 
         if (draft.IsComplete)
         {
@@ -717,6 +749,27 @@ internal sealed class ApplicationWorkflowService(
         first.ToHashSet(StringComparer.OrdinalIgnoreCase)
             .SetEquals(second);
 
+    private async Task<T> UseAiActionAsync<T>(
+        AiFeature feature,
+        Func<Task<T>> operation,
+        CancellationToken cancellationToken)
+    {
+        var reservation = await membershipService.ReserveAiActionAsync(
+            feature,
+            cancellationToken);
+        try
+        {
+            return await operation();
+        }
+        catch
+        {
+            await membershipService.ReleaseAiActionAsync(
+                reservation,
+                CancellationToken.None);
+            throw;
+        }
+    }
+
     private static ApplicationDraftDto ToDto(ApplicationDraft draft) =>
         new(
             draft.Id,
@@ -777,11 +830,11 @@ internal sealed class ApplicationWorkflowService(
         }
     }
 
-    private static void EnsureUserId(Guid userId)
+    private void EnsureDraftOwnership(ApplicationDraft draft)
     {
-        if (userId == Guid.Empty)
+        if (draft.UserId != currentUser.UserId)
         {
-            throw new ArgumentException("A user identifier is required.", nameof(userId));
+            throw new ApplicationWorkflowException("The application draft was not found.", 404);
         }
     }
 }

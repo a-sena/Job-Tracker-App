@@ -3,6 +3,7 @@ using System;
 using JobTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JobTracker.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(JobTrackerDbContext))]
-    partial class JobTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260805061822_AddIdentityAccounts")]
+    partial class AddIdentityAccounts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -411,16 +414,6 @@ namespace JobTracker.Infrastructure.Persistence.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
-                    b.Property<int>("AiActionsUsed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("ai_actions_used");
-
-                    b.Property<DateTimeOffset?>("AiUsagePeriodStartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("ai_usage_period_started_at");
-
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("text");
@@ -436,59 +429,11 @@ namespace JobTracker.Infrastructure.Persistence.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("FreeCoverLettersUsed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("free_cover_letters_used");
-
-                    b.Property<int>("FreeCvReviewsUsed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("free_cv_reviews_used");
-
-                    b.Property<int>("FreeCvTailorsUsed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("free_cv_tailors_used");
-
-                    b.Property<int>("FreeInterviewSetsUsed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("free_interview_sets_used");
-
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("MembershipPlan")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("Free")
-                        .HasColumnName("membership_plan");
-
-                    b.Property<DateTimeOffset?>("MembershipRenewsAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("membership_renews_at");
-
-                    b.Property<DateTimeOffset?>("MembershipStartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("membership_started_at");
-
-                    b.Property<string>("MembershipStatus")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("Active")
-                        .HasColumnName("membership_status");
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
@@ -510,30 +455,6 @@ namespace JobTracker.Infrastructure.Persistence.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
-                    b.Property<string>("StripeCustomerId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("stripe_customer_id");
-
-                    b.Property<DateTimeOffset?>("StripeLastEventCreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("stripe_last_event_created_at");
-
-                    b.Property<string>("StripeLastEventId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("stripe_last_event_id");
-
-                    b.Property<string>("StripePriceId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("stripe_price_id");
-
-                    b.Property<string>("StripeSubscriptionId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("stripe_subscription_id");
-
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
 
@@ -553,16 +474,6 @@ namespace JobTracker.Infrastructure.Persistence.Migrations
                     b.HasIndex("NormalizedUserName")
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
-
-                    b.HasIndex("StripeCustomerId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_users_stripe_customer_id")
-                        .HasFilter("stripe_customer_id IS NOT NULL");
-
-                    b.HasIndex("StripeSubscriptionId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_users_stripe_subscription_id")
-                        .HasFilter("stripe_subscription_id IS NOT NULL");
 
                     b.ToTable("users", (string)null);
                 });

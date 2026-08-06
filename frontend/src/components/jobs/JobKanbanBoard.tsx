@@ -7,6 +7,7 @@ import {
 import { format, isValid, parseISO } from "date-fns";
 import { nb } from "date-fns/locale";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "../../lib/apiClient";
 
 export const JOB_STATUSES = [
   "Applied",
@@ -806,11 +807,9 @@ export function JobKanbanBoard({
       requestControllers.current.set(jobId, controller);
 
       try {
-        const response = await fetch(
-          joinApiUrl(
-            apiBaseUrl,
-            `/api/jobs/${encodeURIComponent(jobId)}/status`,
-          ),
+        const response = await apiFetch(
+          apiBaseUrl,
+          `/api/jobs/${encodeURIComponent(jobId)}/status`,
           {
             method: "PUT",
             headers: {
@@ -967,11 +966,9 @@ export function JobKanbanBoard({
       setDetailsError(null);
       setIsLoadingDetails(true);
       try {
-        const response = await fetch(
-          joinApiUrl(
-            apiBaseUrl,
-            `/api/application-workflow/logged/${encodeURIComponent(job.id)}`,
-          ),
+        const response = await apiFetch(
+          apiBaseUrl,
+          `/api/application-workflow/logged/${encodeURIComponent(job.id)}`,
           { headers: { Accept: "application/json" } },
         );
         if (response.status === 404) {
@@ -1011,8 +1008,9 @@ export function JobKanbanBoard({
       setDeletingJobIds((current) => new Set(current).add(job.id));
       setDetailsError(null);
       try {
-        const response = await fetch(
-          joinApiUrl(apiBaseUrl, `/api/jobs/${encodeURIComponent(job.id)}`),
+        const response = await apiFetch(
+          apiBaseUrl,
+          `/api/jobs/${encodeURIComponent(job.id)}`,
           { method: "DELETE", headers: { Accept: "application/json" } },
         );
         if (!response.ok) {

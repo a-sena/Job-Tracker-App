@@ -2,11 +2,13 @@ using JobTracker.Application.Cvs;
 using JobTracker.Application.Cvs.Dtos;
 using JobTracker.Application.Jobs;
 using JobTracker.Application.Jobs.Dtos;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JobTracker.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/jobs")]
 [Produces("application/json")]
 public sealed class JobsController(

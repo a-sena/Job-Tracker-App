@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { apiFetch } from "../../lib/apiClient";
 
 export interface SavedCv {
   id: string;
@@ -196,7 +197,7 @@ async function request<T>(
   path: string,
   options?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(apiUrl(apiBaseUrl, path), {
+  const response = await apiFetch(apiBaseUrl, path, {
     ...options,
     headers: {
       Accept: "application/json",

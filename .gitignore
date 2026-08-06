@@ -12,6 +12,7 @@ artifacts/
 ## Local configuration and secrets
 appsettings.Local.json
 .env
+**/.data-protection-keys/
 
 ## Test output
 TestResults/

@@ -1,12 +1,15 @@
 using JobTracker.Application.ApplicationWorkflow;
 using JobTracker.Application.ApplicationWorkflow.Dtos;
+using Microsoft.AspNetCore.Authorization;
 using JobTracker.Application.Cvs;
 using JobTracker.Application.Jobs.Dtos;
+using JobTracker.Application.Membership;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JobTracker.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/application-workflow")]
 [Produces("application/json")]
 public sealed class ApplicationWorkflowController(
@@ -195,6 +198,13 @@ public sealed class ApplicationWorkflowController(
                 title: "Application workflow failed",
                 detail: exception.Message);
         }
+        catch (MembershipLimitException exception)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status402PaymentRequired,
+                title: "AI allowance used",
+                detail: exception.Message);
+        }
     }
 
     private async Task<ActionResult<ApplicationDraftDto>> ExecuteAsync(
@@ -213,6 +223,13 @@ public sealed class ApplicationWorkflowController(
             return Problem(
                 statusCode: exception.StatusCode,
                 title: "Application workflow failed",
+                detail: exception.Message);
+        }
+        catch (MembershipLimitException exception)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status402PaymentRequired,
+                title: "AI allowance used",
                 detail: exception.Message);
         }
     }

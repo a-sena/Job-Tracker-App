@@ -3,6 +3,7 @@ using System;
 using JobTracker.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JobTracker.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(JobTrackerDbContext))]
-    partial class JobTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260805085624_AddMembershipUsage")]
+    partial class AddMembershipUsage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -510,30 +513,6 @@ namespace JobTracker.Infrastructure.Persistence.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
-                    b.Property<string>("StripeCustomerId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("stripe_customer_id");
-
-                    b.Property<DateTimeOffset?>("StripeLastEventCreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("stripe_last_event_created_at");
-
-                    b.Property<string>("StripeLastEventId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("stripe_last_event_id");
-
-                    b.Property<string>("StripePriceId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("stripe_price_id");
-
-                    b.Property<string>("StripeSubscriptionId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("stripe_subscription_id");
-
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
 
@@ -553,16 +532,6 @@ namespace JobTracker.Infrastructure.Persistence.Migrations
                     b.HasIndex("NormalizedUserName")
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
-
-                    b.HasIndex("StripeCustomerId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_users_stripe_customer_id")
-                        .HasFilter("stripe_customer_id IS NOT NULL");
-
-                    b.HasIndex("StripeSubscriptionId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_users_stripe_subscription_id")
-                        .HasFilter("stripe_subscription_id IS NOT NULL");
 
                     b.ToTable("users", (string)null);
                 });

@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>JobTracker.Api</RootNamespace>
+    <UserSecretsId>jobtracker-local-development</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

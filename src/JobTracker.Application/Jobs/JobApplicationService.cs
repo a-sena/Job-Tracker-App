@@ -1,4 +1,5 @@
 using JobTracker.Application.Abstractions.Persistence;
+using JobTracker.Application.Authentication;
 using JobTracker.Application.Jobs.Dtos;
 using JobTracker.Application.Jobs.Mappings;
 using JobTracker.Domain.Entities;
@@ -8,16 +9,14 @@ namespace JobTracker.Application.Jobs;
 internal sealed class JobApplicationService(
     IJobApplicationRepository repository,
     ITailoredCvRepository tailoredCvRepository,
-    IApplicationDraftRepository draftRepository) : IJobApplicationService
+    IApplicationDraftRepository draftRepository,
+    ICurrentUser currentUser) : IJobApplicationService
 {
     public async Task<IReadOnlyList<JobApplicationDto>> GetAllAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        if (userId == Guid.Empty)
-        {
-            throw new ArgumentException("A user identifier is required.", nameof(userId));
-        }
+        currentUser.EnsureOwns(userId);
 
         var jobApplications = await repository.GetAllByUserIdAsync(
             userId,
@@ -40,7 +39,7 @@ internal sealed class JobApplicationService(
             id,
             cancellationToken: cancellationToken);
 
-        if (jobApplication is null)
+        if (jobApplication is null || jobApplication.UserId != currentUser.UserId)
         {
             return null;
         }
@@ -57,6 +56,7 @@ internal sealed class JobApplicationService(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        currentUser.EnsureOwns(request.UserId);
 
         var jobApplication = JobApplication.Create(
             request.UserId,
@@ -84,7 +84,7 @@ internal sealed class JobApplicationService(
             asTracking: true,
             cancellationToken);
 
-        if (jobApplication is null)
+        if (jobApplication is null || jobApplication.UserId != currentUser.UserId)
         {
             return null;
         }
@@ -108,7 +108,7 @@ internal sealed class JobApplicationService(
             asTracking: true,
             cancellationToken);
 
-        if (jobApplication is null)
+        if (jobApplication is null || jobApplication.UserId != currentUser.UserId)
         {
             return false;
         }

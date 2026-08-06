@@ -44,6 +44,22 @@ The application is added to the separate Kanban log only after the user chooses 
 existing or new category. Tailored CVs and interview questions are downloadable as
 PDFs. Unsupported requirements remain visible instead of being fabricated.
 
+Create an account from the first screen using an email address and password. Existing
+CVs and applications stored by the former local-workspace version are transferred to
+the new account during registration. Authentication uses ASP.NET Core Identity and an
+HttpOnly session cookie; passwords are hashed by Identity and are never stored in the
+browser. Restart the API after pulling authentication changes so the new endpoints and
+cookie configuration are loaded.
+
+The profile menu also contains a Membership dashboard. Free accounts receive one
+lifetime CV review, one AI-tailored CV, one interview preparation set, and one cover
+letter; manual application tracking remains unlimited. Successful generations consume
+an allowance, while failed AI requests release it. The Founding Member offer is shown
+at $8 USD per month or $80 USD per year with 40 monthly AI actions. Planned
+regular prices are $10 USD per month and $100 USD per year.
+Checkout remains disabled until a real payment provider is configured, so the UI never
+pretends that an account has been upgraded or charges a card without confirmation.
+
 The FastAPI service requires a local
 `services/ai-processing/.env` containing `OPENAI_API_KEY` before it starts.
 The key is used for PDF CV structuring, ATS review, tailoring, and interview
@@ -170,6 +186,57 @@ Commit generated migrations to source control. In production, apply reviewed
 migrations in the deployment pipeline rather than calling `Database.Migrate()` at
 application startup.
 
+## Configure Stripe subscriptions
+
+JobFlow uses Stripe-hosted Checkout for card collection, signed webhooks for
+membership activation, and the Stripe Customer Portal for cancellation and billing
+management. Full card numbers never pass through the JobFlow API.
+
+In Stripe test mode, create one product named `JobFlow Founding Member` with two
+recurring USD prices:
+
+- Monthly: `$8.00 USD`, recurring every month
+- Annual: `$80.00 USD`, recurring every year
+
+Copy the resulting `price_...` identifiers. Keep all secrets outside tracked
+configuration by running these commands from the repository root:
+
+```powershell
+dotnet user-secrets set "Stripe:SecretKey" "sk_test_REPLACE_ME" --project .\src\JobTracker.Api
+dotnet user-secrets set "Stripe:MonthlyPriceId" "price_REPLACE_MONTHLY" --project .\src\JobTracker.Api
+dotnet user-secrets set "Stripe:AnnualPriceId" "price_REPLACE_ANNUAL" --project .\src\JobTracker.Api
+```
+
+For local webhook delivery, install and authenticate the Stripe CLI, then keep this
+command running in a separate terminal:
+
+```powershell
+stripe.cmd login
+stripe.cmd listen --forward-to http://localhost:5080/api/billing/webhook
+```
+
+The CLI prints a signing secret beginning with `whsec_`. Store it with:
+
+```powershell
+dotnet user-secrets set "Stripe:WebhookSecret" "whsec_REPLACE_ME" --project .\src\JobTracker.Api
+```
+
+Restart the API after changing secrets. In the Stripe Dashboard, activate the
+Customer Portal and allow customers to cancel subscriptions. For production, replace
+the test secret and Price IDs with live-mode values, set the three Stripe redirect
+URLs to the production frontend, and register
+`https://YOUR_API_DOMAIN/api/billing/webhook` for these events:
+
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+
+Production values should be supplied through environment variables such as
+`Stripe__SecretKey`, `Stripe__WebhookSecret`, `Stripe__MonthlyPriceId`, and
+`Stripe__AnnualPriceId`. Configure VAT/tax behaviour in Stripe with an accountant
+before accepting live payments.
+
 ## Run the API
 
 ```powershell
@@ -231,6 +298,27 @@ local text extraction first; PDFs without selectable text fall back to OpenAI
 visual page analysis with response storage disabled. Users can save and select
 multiple CVs for different job types.
 
-`UserId` is currently accepted in the create DTO because authentication is outside
-this scaffold. Before exposing the API publicly, derive it from authenticated
-identity claims and scope all reads and writes by that identifier.
+## Account endpoints
+
+| Method | Route | Result |
+|---|---|---|
+| `GET` | `/api/auth/csrf` | Issues the CSRF request token used by the React client |
+| `POST` | `/api/auth/register` | Creates an Identity account and signs in |
+| `POST` | `/api/auth/login` | Starts an HttpOnly cookie session |
+| `GET` | `/api/auth/me` | Restores the current signed-in user |
+| `POST` | `/api/auth/change-password` | Changes the authenticated user's password |
+| `POST` | `/api/auth/logout` | Ends the current session |
+
+Billing endpoints:
+
+| Method | Route | Result |
+|---|---|---|
+| `GET` | `/api/membership` | Returns the current plan and AI allowances |
+| `POST` | `/api/billing/checkout` | Creates an authenticated Stripe Checkout Session |
+| `POST` | `/api/billing/portal` | Creates a Stripe Customer Portal Session |
+| `POST` | `/api/billing/webhook` | Verifies and applies Stripe subscription events |
+
+All CV, application workflow, category, and job endpoints require authentication.
+Although some legacy request contracts still contain `UserId`, the Application layer
+verifies it against the authenticated Identity claim and scopes ID-based reads and
+writes to the current account.

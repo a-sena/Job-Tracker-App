@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ApplicationWorkflow from "./components/application/ApplicationWorkflow";
+import AuthPage, { type AuthUser } from "./components/auth/AuthPage";
+import ChangePasswordDialog from "./components/auth/ChangePasswordDialog";
+import MembershipDialog from "./components/membership/MembershipDialog";
 import JobKanbanBoard, {
   type JobApplication,
   type JobStatus,
 } from "./components/jobs/JobKanbanBoard";
+import { apiFetch, apiUrl as buildApiUrl, clearCsrfToken } from "./lib/apiClient";
 
 interface ApiJobApplication {
   id: string;
@@ -44,7 +48,7 @@ const UNCATEGORIZED = "uncategorized";
 type CategoryFilter = typeof ALL_CATEGORIES | typeof UNCATEGORIZED | string;
 
 function apiUrl(path: string): string {
-  return `${API_BASE_URL}${path}`;
+  return buildApiUrl(API_BASE_URL, path);
 }
 
 function isUncategorizedJob(job: ApiJobApplication): boolean {
@@ -98,7 +102,19 @@ function toBoardJob(job: ApiJobApplication): JobApplication {
 }
 
 export default function App(): JSX.Element {
-  const [userId] = useState(getLocalUserId);
+  const [legacyUserId] = useState(getLocalUserId);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [isMembershipDialogOpen, setIsMembershipDialogOpen] = useState(false);
+  const [billingNotice, setBillingNotice] = useState<"success" | "cancelled" | "portal" | null>(() => {
+    const value = new URLSearchParams(window.location.search).get("billing");
+    return value === "success" || value === "cancelled" || value === "portal"
+      ? value
+      : null;
+  });
+  const userId = authUser?.id ?? "";
   const [jobs, setJobs] = useState<ApiJobApplication[]>([]);
   const [categories, setCategories] = useState<ApplicationCategory[]>([]);
   const [categoryFilter, setCategoryFilter] =
@@ -133,18 +149,18 @@ export default function App(): JSX.Element {
   );
 
   const loadJobs = useCallback(async (): Promise<void> => {
+    if (!userId) return;
     setIsLoadingJobs(true);
     setJobsError(null);
 
     try {
       const [jobsResponse, categoriesResponse] = await Promise.all([
-        fetch(apiUrl(`/api/jobs?userId=${encodeURIComponent(userId)}`), {
+        apiFetch(API_BASE_URL, `/api/jobs?userId=${encodeURIComponent(userId)}`, {
           headers: { Accept: "application/json" },
         }),
-        fetch(
-          apiUrl(
-            `/api/application-categories?userId=${encodeURIComponent(userId)}`,
-          ),
+        apiFetch(
+          API_BASE_URL,
+          `/api/application-categories?userId=${encodeURIComponent(userId)}`,
           { headers: { Accept: "application/json" } },
         ),
       ]);
@@ -178,8 +194,75 @@ export default function App(): JSX.Element {
   }, [userId]);
 
   useEffect(() => {
-    void loadJobs();
-  }, [loadJobs]);
+    if (authUser) void loadJobs();
+  }, [authUser, loadJobs]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function restoreSession(): Promise<void> {
+      try {
+        const response = await apiFetch(API_BASE_URL, "/api/auth/me", {
+          headers: { Accept: "application/json" },
+        });
+        if (response.ok && isMounted) {
+          setAuthUser((await response.json()) as AuthUser);
+        }
+      } finally {
+        if (isMounted) setIsCheckingSession(false);
+      }
+    }
+    void restoreSession();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!billingNotice) return;
+    setIsMembershipDialogOpen(true);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("billing");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [billingNotice]);
+
+  async function logout(): Promise<void> {
+    try {
+      const response = await apiFetch(API_BASE_URL, "/api/auth/logout", { method: "POST" });
+      if (!response.ok) throw new Error("Logout failed.");
+      clearCsrfToken(API_BASE_URL);
+      setAuthUser(null);
+      setJobs([]);
+      setCategories([]);
+      setIsProfileOpen(false);
+    } catch {
+      setIsProfileOpen(false);
+      window.alert("You could not be logged out. Check the API connection and try again.");
+    }
+  }
+
+  if (isCheckingSession) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f3f0e8] text-[#172033]">
+        <div className="flex items-center gap-3 text-sm font-black">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-[#3157d5] border-t-transparent" />
+          Opening your workspace…
+        </div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <AuthPage
+        apiBaseUrl={API_BASE_URL}
+        legacyUserId={legacyUserId}
+        onAuthenticated={(user, isNewAccount) => {
+          if (isNewAccount) localStorage.removeItem(LOCAL_USER_ID_KEY);
+          setAuthUser(user);
+        }}
+      />
+    );
+  }
 
   function handleStatusConfirmed(jobId: string, status: JobStatus) {
     setJobs((currentJobs) =>
@@ -194,37 +277,27 @@ export default function App(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-[#f3f0e8] text-[#172033]">
-      <header className="sticky top-0 z-40 border-b-2 border-[#172033] bg-white">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <a href="#application-studio" className="flex items-center gap-2 sm:gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-md border-2 border-[#172033] bg-[#3157d5] text-base font-black text-white shadow-[3px_3px_0_#ffcc4d]">
+      <header className="sticky top-0 z-40 border-b border-[#e4e1da] bg-white/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-[72px] max-w-[1600px] items-center justify-between px-4 sm:px-6 lg:px-8">
+          <a href="#application-studio" className="group flex items-center gap-3" aria-label="JobFlow home">
+            <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-[#172033] text-base font-black text-white shadow-sm transition group-hover:-translate-y-0.5">
               J
+              <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-[#ffcc4d]" />
             </span>
-            <span>
-              <span className="block text-lg font-black tracking-tight">JobFlow</span>
-              <span className="hidden text-xs font-medium text-[#626979] sm:block">
-                Application workspace
-              </span>
+            <span className="hidden sm:block">
+              <span className="block text-[17px] font-black tracking-[-0.025em]">JobFlow</span>
+              <span className="block text-[10px] font-semibold tracking-wide text-[#7a808d]">APPLICATION WORKSPACE</span>
             </span>
           </a>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <nav
-              aria-label="Main navigation"
-              className="flex items-center rounded-xl border border-[#d7d3c9] bg-[#f3f0e8] p-1"
-            >
+
+          <div className="flex items-center gap-2 sm:gap-4">
+            <nav aria-label="Main navigation" className="flex items-center gap-1 rounded-full bg-[#f3f4f6] p-1">
               <a
                 href="#application-studio"
                 aria-label="Prepare an application"
-                className="group flex h-9 items-center gap-2 rounded-lg bg-white px-2.5 text-xs font-bold text-[#172033] shadow-sm transition hover:text-[#3157d5] sm:px-3"
+                className="flex h-10 items-center gap-2 rounded-full bg-[#3157d5] px-3 text-xs font-bold text-white shadow-[0_4px_12px_rgba(49,87,213,0.22)] transition hover:bg-[#294bc0] sm:px-4"
               >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  className="h-4 w-4 text-[#3157d5]"
-                >
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 text-white">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 20h4l10.5-10.5a2.83 2.83 0 0 0-4-4L4 16v4Z" />
                   <path strokeLinecap="round" d="m13.5 6.5 4 4" />
                 </svg>
@@ -233,46 +306,80 @@ export default function App(): JSX.Element {
               <a
                 href="#application-log"
                 aria-label="Open application log"
-                className="group flex h-9 items-center gap-2 rounded-lg px-2.5 text-xs font-bold text-[#555d6d] transition hover:bg-white/80 hover:text-[#172033] sm:px-3"
+                className="group flex h-10 items-center gap-2 rounded-full px-3 text-xs font-bold text-[#555d6d] transition hover:bg-white hover:text-[#172033] sm:px-4"
               >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  className="h-4 w-4 transition group-hover:text-[#c84736]"
-                >
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
                   <rect x="4" y="5" width="16" height="15" rx="2" />
                   <path strokeLinecap="round" d="M8 3v4M16 3v4M8 11h8M8 15h5" />
                 </svg>
                 <span className="hidden sm:inline">Applications</span>
                 {jobs.length > 0 ? (
-                  <span className="hidden min-w-5 rounded-full bg-[#172033] px-1.5 py-0.5 text-center text-[9px] font-black text-white md:inline-block">
+                  <span className="flex min-w-5 items-center justify-center rounded-full bg-[#3157d5] px-1.5 py-0.5 text-[9px] font-black text-white">
                     {jobs.length}
                   </span>
                 ) : null}
               </a>
             </nav>
 
-            <span aria-hidden="true" className="hidden h-8 w-px bg-[#d7d3c9] sm:block" />
+            <div className="relative">
+              <button
+                type="button"
+                aria-expanded={isProfileOpen}
+                aria-haspopup="menu"
+                onClick={() => setIsProfileOpen((open) => !open)}
+                className="group flex h-12 items-center gap-2.5 rounded-full border border-[#e2e4e8] bg-white p-1.5 pr-2 text-left shadow-sm transition hover:border-[#c8ccd4] hover:shadow-md sm:pr-3"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff846f] to-[#ff604c] text-xs font-black text-white shadow-sm">
+                  {authUser.email.charAt(0).toUpperCase()}
+                </span>
+                <span className="hidden max-w-32 text-left md:block">
+                  <span className="block truncate text-xs font-extrabold leading-4 text-[#172033]">
+                    {authUser.email.split("@")[0]}
+                  </span>
+                  <span className="block text-[10px] font-medium leading-3 text-[#7a808d]">My account</span>
+                </span>
+                <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className={`hidden h-4 w-4 text-[#8b909b] transition-transform sm:block ${isProfileOpen ? "rotate-180" : ""}`}>
+                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+                </svg>
+              </button>
 
-            <div
-              className="flex items-center gap-2 rounded-xl px-1 py-1 sm:pr-2"
-              aria-label="Current user: Guest, local workspace"
-              title="User accounts will be connected here"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ff7058] text-xs font-black text-[#172033] ring-2 ring-white ring-offset-1 ring-offset-[#d7d3c9]">
-                G
-              </span>
-              <span className="hidden text-left md:block">
-                <span className="block text-xs font-black leading-4 text-[#172033]">
-                  Guest
-                </span>
-                <span className="block text-[10px] font-medium leading-3 text-[#737988]">
-                  Local workspace
-                </span>
-              </span>
+              {isProfileOpen ? (
+                <div role="menu" className="absolute right-0 mt-3 w-72 origin-top-right overflow-hidden rounded-2xl border border-[#e1e3e7] bg-white p-2 shadow-[0_18px_50px_rgba(23,32,51,0.16)]">
+                  <div className="flex items-center gap-3 rounded-xl bg-[#f6f5f1] px-3 py-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff846f] to-[#ff604c] text-sm font-black text-white">
+                      {authUser.email.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-extrabold text-[#172033]">{authUser.email.split("@")[0]}</p>
+                      <p className="truncate text-[11px] font-medium text-[#737988]">{authUser.email}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <button type="button" role="menuitem" onClick={() => { setIsMembershipDialogOpen(true); setIsProfileOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold text-[#30384b] transition hover:bg-[#fff7d8] hover:text-[#8a5520]">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#fff4cb] text-[#8a5520]">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5v-9Z" /><path strokeLinecap="round" d="M4 9h16M8 15h3" /></svg>
+                      </span>
+                      <span className="flex-1">
+                        <span className="block">Membership</span>
+                        <span className="block text-[10px] font-semibold text-[#858a96]">Plan and AI usage</span>
+                      </span>
+                      <span className="rounded-full bg-[#eef0f3] px-2 py-1 text-[9px] font-black uppercase text-[#687083]">Free</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setIsPasswordDialogOpen(true); setIsProfileOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold text-[#30384b] transition hover:bg-[#eef2ff] hover:text-[#3157d5]">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#eef2ff] text-[#3157d5]">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><rect x="5" y="10" width="14" height="10" rx="2" /><path strokeLinecap="round" d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" /></svg>
+                      </span>
+                      Change password
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => void logout()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold text-[#a54538] transition hover:bg-[#fff0ed]">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#fff0ed] text-[#c84736]">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M10 17l5-5-5-5M15 12H3M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /></svg>
+                      </span>
+                      Log out
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -413,6 +520,22 @@ export default function App(): JSX.Element {
           )}
         </section>
       </main>
+      {isPasswordDialogOpen ? (
+        <ChangePasswordDialog
+          apiBaseUrl={API_BASE_URL}
+          onClose={() => setIsPasswordDialogOpen(false)}
+        />
+      ) : null}
+      {isMembershipDialogOpen ? (
+        <MembershipDialog
+          apiBaseUrl={API_BASE_URL}
+          billingNotice={billingNotice}
+          onClose={() => {
+            setIsMembershipDialogOpen(false);
+            setBillingNotice(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

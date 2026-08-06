@@ -1,5 +1,6 @@
 using System.Text.Json;
 using JobTracker.Application.Abstractions.Persistence;
+using JobTracker.Application.Authentication;
 using JobTracker.Application.Cvs.Dtos;
 using JobTracker.Domain.Entities;
 
@@ -10,7 +11,8 @@ internal sealed class CvService(
     ITailoredCvRepository tailoredCvRepository,
     IJobApplicationRepository jobApplicationRepository,
     IMasterCvImportGateway masterCvImportGateway,
-    ICvTailoringGateway tailoringGateway) : ICvService
+    ICvTailoringGateway tailoringGateway,
+    ICurrentUser currentUser) : ICvService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -38,7 +40,7 @@ internal sealed class CvService(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        EnsureUserId(userId);
+        currentUser.EnsureOwns(userId);
         var masterCv = await masterCvRepository.GetByUserIdAsync(
             userId,
             cancellationToken: cancellationToken);
@@ -51,7 +53,7 @@ internal sealed class CvService(
         UpsertMasterCvRequest request,
         CancellationToken cancellationToken = default)
     {
-        EnsureUserId(userId);
+        currentUser.EnsureOwns(userId);
         ArgumentNullException.ThrowIfNull(request);
 
         var content = JsonSerializer.Serialize(request.Content, JsonOptions);
@@ -88,6 +90,10 @@ internal sealed class CvService(
             jobApplicationId,
             cancellationToken: cancellationToken)
             ?? throw new CvWorkflowException("The job application was not found.", 404);
+        if (jobApplication.UserId != currentUser.UserId)
+        {
+            throw new CvWorkflowException("The job application was not found.", 404);
+        }
 
         var masterCv = await masterCvRepository.GetByUserIdAsync(
             jobApplication.UserId,
@@ -127,6 +133,11 @@ internal sealed class CvService(
         Guid jobApplicationId,
         CancellationToken cancellationToken = default)
     {
+        if (!await OwnsJobAsync(jobApplicationId, cancellationToken))
+        {
+            return null;
+        }
+
         var tailoredCv = await tailoredCvRepository.GetLatestByJobIdAsync(
             jobApplicationId,
             cancellationToken);
@@ -138,6 +149,11 @@ internal sealed class CvService(
         Guid jobApplicationId,
         CancellationToken cancellationToken = default)
     {
+        if (!await OwnsJobAsync(jobApplicationId, cancellationToken))
+        {
+            return null;
+        }
+
         var tailoredCv = await tailoredCvRepository.GetLatestByJobIdAsync(
             jobApplicationId,
             cancellationToken);
@@ -186,11 +202,13 @@ internal sealed class CvService(
         }
     }
 
-    private static void EnsureUserId(Guid userId)
+    private async Task<bool> OwnsJobAsync(
+        Guid jobApplicationId,
+        CancellationToken cancellationToken)
     {
-        if (userId == Guid.Empty)
-        {
-            throw new ArgumentException("A user identifier is required.", nameof(userId));
-        }
+        var job = await jobApplicationRepository.GetByIdAsync(
+            jobApplicationId,
+            cancellationToken: cancellationToken);
+        return job is not null && job.UserId == currentUser.UserId;
     }
 }
