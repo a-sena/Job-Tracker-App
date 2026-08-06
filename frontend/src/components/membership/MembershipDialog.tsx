@@ -105,7 +105,7 @@ export default function MembershipDialog({
   }, [apiBaseUrl, reloadToken]);
 
   useEffect(() => {
-    if (billingNotice !== "success") return;
+    if (billingNotice !== "success" || dashboard?.canManageBilling) return;
     let attempts = 0;
     const interval = window.setInterval(() => {
       attempts += 1;
@@ -113,7 +113,7 @@ export default function MembershipDialog({
       if (attempts >= 5) window.clearInterval(interval);
     }, 2000);
     return () => window.clearInterval(interval);
-  }, [billingNotice]);
+  }, [billingNotice, dashboard?.canManageBilling]);
 
   async function openBilling(path: "/api/billing/checkout" | "/api/billing/portal"): Promise<void> {
     setError(null);
@@ -184,7 +184,9 @@ export default function MembershipDialog({
         <div className="p-5 sm:p-8">
           {billingNotice === "success" ? (
             <div className="mb-5 rounded-xl border-2 border-[#2f7650] bg-[#dcf5e5] px-4 py-3 text-sm font-bold text-[#235b3d]">
-              Payment completed. Stripe is confirming your membership; this page will show the paid plan as soon as the signed webhook arrives.
+              {dashboard?.canManageBilling
+                ? "Membership activated. Your paid AI allowance is ready to use."
+                : "Payment completed. Stripe is confirming your membership; this page will show the paid plan as soon as the signed webhook arrives."}
             </div>
           ) : null}
           {billingNotice === "cancelled" ? (
