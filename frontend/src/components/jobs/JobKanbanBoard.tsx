@@ -1535,20 +1535,11 @@ export function JobKanbanBoard({
 
       const response = await apiFetch(
         apiBaseUrl,
-        `/api/jobs/${encodeURIComponent(selectedJob.id)}/details`,
+        `/api/jobs/${encodeURIComponent(selectedJob.id)}/description`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({
-            description,
-            location: selectedJob.location,
-            recruiterName: selectedJob.recruiterName,
-            recruiterEmail: selectedJob.recruiterEmail,
-            recruiterLinkedInUrl: selectedJob.recruiterLinkedInUrl,
-            salaryRange: selectedJob.salaryRange,
-            workArrangement: selectedJob.workArrangement,
-            personalNotes: selectedJob.personalNotes,
-          }),
+          body: JSON.stringify({ description }),
         },
       );
       if (!response.ok) {

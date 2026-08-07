@@ -24,5 +24,10 @@ public interface IJobApplicationService
         UpdateJobDetailsRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<JobApplicationDto?> UpdateDescriptionAsync(
+        Guid id,
+        UpdateJobDescriptionRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }

@@ -144,6 +144,33 @@ internal sealed class JobApplicationService(
         return jobApplication.ToDto(summaries.GetValueOrDefault(jobApplication.Id));
     }
 
+    public async Task<JobApplicationDto?> UpdateDescriptionAsync(
+        Guid id,
+        UpdateJobDescriptionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var jobApplication = await repository.GetByIdAsync(
+            id,
+            asTracking: true,
+            cancellationToken);
+
+        if (jobApplication is null || jobApplication.UserId != currentUser.UserId)
+        {
+            return null;
+        }
+
+        jobApplication.UpdateDescription(request.Description);
+        await repository.SaveChangesAsync(cancellationToken);
+
+        var summaries = await tailoredCvRepository.GetLatestSummariesAsync(
+            [jobApplication.Id],
+            cancellationToken);
+
+        return jobApplication.ToDto(summaries.GetValueOrDefault(jobApplication.Id));
+    }
+
     public async Task<bool> DeleteAsync(
         Guid id,
         CancellationToken cancellationToken = default)

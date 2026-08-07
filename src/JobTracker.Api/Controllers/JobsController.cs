@@ -205,6 +205,26 @@ public sealed class JobsController(
     }
 
     /// <summary>
+    /// Updates only the saved vacancy description for a tracked application.
+    /// </summary>
+    [HttpPut("{id:guid}/description")]
+    [ProducesResponseType<JobApplicationDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<JobApplicationDto>> UpdateDescription(
+        Guid id,
+        [FromBody] UpdateJobDescriptionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var updatedJob = await jobApplicationService.UpdateDescriptionAsync(
+            id,
+            request,
+            cancellationToken);
+
+        return updatedJob is null ? NotFound() : Ok(updatedJob);
+    }
+
+    /// <summary>
     /// Permanently removes a tracked application, tailored CVs, and saved preparation artifacts.
     /// </summary>
     [HttpDelete("{id:guid}")]
