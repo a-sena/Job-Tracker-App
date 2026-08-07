@@ -208,6 +208,7 @@ public sealed class JobsController(
     /// Updates only the saved vacancy description for a tracked application.
     /// </summary>
     [HttpPut("{id:guid}/description")]
+    [HttpPost("{id:guid}/description")]
     [ProducesResponseType<JobApplicationDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
