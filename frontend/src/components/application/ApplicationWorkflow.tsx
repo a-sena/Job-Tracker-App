@@ -40,6 +40,7 @@ export interface ApplicationDraft {
   coverLetter: CoverLetter | null;
   coverLetterPdfFileName: string | null;
   interviewQuestions: string[];
+  interviewAnswers: string[];
   interviewQuestionsPdfFileName: string | null;
   createdAt: string;
   updatedAt: string;
@@ -162,6 +163,7 @@ type BusyAction =
   | "approval"
   | "coverLetter"
   | "questions"
+  | "answers"
   | "log"
   | null;
 
@@ -171,6 +173,7 @@ const EMPTY_DRAFT_ARRAYS = {
   tailoredMatchedKeywords: [] as string[],
   tailoredMissingKeywords: [] as string[],
   interviewQuestions: [] as string[],
+  interviewAnswers: [] as string[],
 };
 
 function apiUrl(apiBaseUrl: string, path: string): string {
@@ -246,6 +249,9 @@ function normalizeDraft(draft: ApplicationDraft): ApplicationDraft {
     tailoredMatchedKeywords: draft.tailoredMatchedKeywords ?? [],
     tailoredMissingKeywords: draft.tailoredMissingKeywords ?? [],
     interviewQuestions: draft.interviewQuestions ?? [],
+    interviewAnswers: (draft.interviewQuestions ?? []).map(
+      (_, index) => draft.interviewAnswers?.[index] ?? "",
+    ),
   };
 }
 
@@ -913,6 +919,45 @@ export default function ApplicationWorkflow({
     }
   }
 
+  function updateInterviewAnswer(index: number, value: string): void {
+    setDraft((current) => {
+      if (!current) return current;
+      const answers = current.interviewQuestions.map(
+        (_, answerIndex) => answerIndex === index
+          ? value
+          : current.interviewAnswers[answerIndex] ?? "",
+      );
+      return { ...current, interviewAnswers: answers };
+    });
+  }
+
+  async function saveInterviewAnswers(): Promise<void> {
+    if (!draft || draft.interviewQuestions.length === 0) return;
+    setBusy("answers");
+    setError(null);
+    try {
+      const updated = await request<ApplicationDraft>(
+        apiBaseUrl,
+        `/api/application-workflow/draft/${encodeURIComponent(draft.id)}/interview-answers`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers: draft.interviewAnswers }),
+        },
+      );
+      setDraft(normalizeDraft(updated));
+      setNotice("Your interview answers were saved.");
+    } catch (answerError) {
+      setError(
+        answerError instanceof Error
+          ? answerError.message
+          : "Your interview answers could not be saved.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function openCategoryDialog() {
     setError(null);
     try {
@@ -1395,6 +1440,9 @@ export default function ApplicationWorkflow({
               </p>
               <p className="text-[11px] font-bold text-[#42634a]">
                 first-round questions ready
+              </p>
+              <p className="mt-1 text-[10px] font-semibold text-[#52745a]">
+                {draft.interviewAnswers.filter((answer) => answer.trim().length > 0).length} answers saved
               </p>
               <button
                 type="button"
@@ -1927,22 +1975,45 @@ export default function ApplicationWorkflow({
             {draft.interviewQuestions.map((question, index) => (
               <li
                 key={`${index}-${question}`}
-                className="flex gap-3 rounded-md border border-[#cfcec9] bg-white p-3 text-sm leading-6"
+                className="rounded-md border border-[#cfcec9] bg-white p-3"
               >
-                <span className="font-black text-[#3157d5]">{index + 1}.</span>
-                <span>{question}</span>
+                <div className="flex gap-3 text-sm leading-6">
+                  <span className="font-black text-[#3157d5]">{index + 1}.</span>
+                  <span className="font-bold text-[#343b4d]">{question}</span>
+                </div>
+                <label className="mt-3 block text-[10px] font-black uppercase tracking-wide text-[#777b84]">
+                  Your answer
+                  <textarea
+                    rows={4}
+                    maxLength={5_000}
+                    value={draft.interviewAnswers[index] ?? ""}
+                    onChange={(event) => updateInterviewAnswer(index, event.target.value)}
+                    placeholder="Write your own example, talking points, or a complete answer…"
+                    className="mt-1.5 w-full resize-y rounded-md border-2 border-[#c5c7cd] bg-[#fbfaf7] px-3 py-2.5 text-sm font-medium normal-case leading-6 tracking-normal text-[#343b4d] outline-none transition focus:border-[#3157d5]"
+                  />
+                </label>
               </li>
             ))}
           </ol>
-          <a
-            href={apiUrl(
-              apiBaseUrl,
-              `/api/application-workflow/draft/${encodeURIComponent(draft.id)}/interview-questions/pdf`,
-            )}
-            className="mt-5 inline-block rounded-md border-2 border-[#172033] bg-[#ffcc4d] px-4 py-2.5 text-sm font-black shadow-[2px_2px_0_#172033]"
-          >
-            Download questions as PDF
-          </a>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy === "answers"}
+              onClick={() => void saveInterviewAnswers()}
+              className="rounded-md border-2 border-[#172033] bg-[#3157d5] px-4 py-2.5 text-sm font-black text-white shadow-[2px_2px_0_#172033] transition hover:translate-x-px hover:translate-y-px hover:shadow-none disabled:cursor-wait disabled:opacity-60"
+            >
+              {busy === "answers" ? "Saving answers…" : "Save my answers"}
+            </button>
+            <a
+              href={apiUrl(
+                apiBaseUrl,
+                `/api/application-workflow/draft/${encodeURIComponent(draft.id)}/interview-questions/pdf`,
+              )}
+              className="rounded-md border-2 border-[#172033] bg-[#ffcc4d] px-4 py-2.5 text-sm font-black shadow-[2px_2px_0_#172033]"
+            >
+              Download questions as PDF
+            </a>
+          </div>
         </Modal>
       ) : null}
 

@@ -1,4 +1,5 @@
 using JobTracker.Domain.Entities;
+using JobTracker.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -47,6 +48,33 @@ internal sealed class JobApplicationConfiguration : IEntityTypeConfiguration<Job
         builder.Property(jobApplication => jobApplication.Location)
             .HasColumnName("location")
             .HasMaxLength(200);
+
+        builder.Property(jobApplication => jobApplication.RecruiterName)
+            .HasColumnName("recruiter_name")
+            .HasMaxLength(200);
+
+        builder.Property(jobApplication => jobApplication.RecruiterEmail)
+            .HasColumnName("recruiter_email")
+            .HasMaxLength(320);
+
+        builder.Property(jobApplication => jobApplication.RecruiterLinkedInUrl)
+            .HasColumnName("recruiter_linkedin_url")
+            .HasMaxLength(2048);
+
+        builder.Property(jobApplication => jobApplication.SalaryRange)
+            .HasColumnName("salary_range")
+            .HasMaxLength(200);
+
+        builder.Property(jobApplication => jobApplication.WorkArrangement)
+            .HasColumnName("work_arrangement")
+            .HasConversion<string>()
+            .HasMaxLength(32)
+            .HasDefaultValue(WorkArrangement.Unspecified)
+            .IsRequired();
+
+        builder.Property(jobApplication => jobApplication.PersonalNotes)
+            .HasColumnName("personal_notes")
+            .HasColumnType("text");
 
         builder.Property(jobApplication => jobApplication.CategoryId)
             .HasColumnName("category_id");

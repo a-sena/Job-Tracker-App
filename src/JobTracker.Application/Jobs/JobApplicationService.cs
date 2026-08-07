@@ -64,7 +64,13 @@ internal sealed class JobApplicationService(
             request.Title,
             request.Company,
             request.Description,
-            request.Location);
+            request.Location,
+            request.RecruiterName,
+            request.RecruiterEmail,
+            request.RecruiterLinkedInUrl,
+            request.SalaryRange,
+            request.WorkArrangement,
+            request.PersonalNotes);
 
         await repository.AddAsync(jobApplication, cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
@@ -90,6 +96,45 @@ internal sealed class JobApplicationService(
         }
 
         jobApplication.ChangeStatus(request.Status);
+        await repository.SaveChangesAsync(cancellationToken);
+
+        var summaries = await tailoredCvRepository.GetLatestSummariesAsync(
+            [jobApplication.Id],
+            cancellationToken);
+
+        return jobApplication.ToDto(summaries.GetValueOrDefault(jobApplication.Id));
+    }
+
+    public async Task<JobApplicationDto?> UpdateDetailsAsync(
+        Guid id,
+        UpdateJobDetailsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var jobApplication = await repository.GetByIdAsync(
+            id,
+            asTracking: true,
+            cancellationToken);
+
+        if (jobApplication is null || jobApplication.UserId != currentUser.UserId)
+        {
+            return null;
+        }
+
+        if (request.Description is not null)
+        {
+            jobApplication.UpdateDescription(request.Description);
+        }
+
+        jobApplication.UpdateDetails(
+            request.Location,
+            request.RecruiterName,
+            request.RecruiterEmail,
+            request.RecruiterLinkedInUrl,
+            request.SalaryRange,
+            request.WorkArrangement,
+            request.PersonalNotes);
         await repository.SaveChangesAsync(cancellationToken);
 
         var summaries = await tailoredCvRepository.GetLatestSummariesAsync(

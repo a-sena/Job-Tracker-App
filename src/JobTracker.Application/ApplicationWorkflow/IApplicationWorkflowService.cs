@@ -55,6 +55,11 @@ public interface IApplicationWorkflowService
         Guid draftId,
         CancellationToken cancellationToken = default);
 
+    Task<ApplicationDraftDto> SaveInterviewAnswersAsync(
+        Guid draftId,
+        SaveInterviewAnswersRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<DraftPdfDto?> GetInterviewQuestionsPdfAsync(
         Guid draftId,
         CancellationToken cancellationToken = default);

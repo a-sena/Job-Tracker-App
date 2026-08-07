@@ -177,6 +177,55 @@ internal sealed class StripeBillingService(
         }
     }
 
+    public async Task CancelSubscriptionAtPeriodEndAsync(
+        CancellationToken cancellationToken = default)
+    {
+        EnsureConfigured();
+        var user = await GetCurrentUserAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(user.StripeSubscriptionId) ||
+            !IsPaidMembership(user.MembershipPlan, user.MembershipStatus))
+        {
+            throw new BillingException(
+                "This account does not have an active subscription to cancel.",
+                409);
+        }
+
+        if (user.MembershipStatus.Equals("Canceling", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            var service = new Stripe.SubscriptionService(
+                new StripeClient(_options.SecretKey));
+            await service.UpdateAsync(
+                user.StripeSubscriptionId,
+                new Stripe.SubscriptionUpdateOptions
+                {
+                    CancelAtPeriodEnd = true
+                },
+                cancellationToken: cancellationToken);
+
+            // Persist immediately so the UI does not depend on webhook delivery latency.
+            // The signed subscription.updated webhook remains the source of truth.
+            user.MembershipStatus = "Canceling";
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (StripeException exception)
+        {
+            logger.LogError(
+                exception,
+                "Stripe could not schedule cancellation for subscription {SubscriptionId}.",
+                user.StripeSubscriptionId);
+            throw new BillingException(
+                "Stripe could not schedule the membership cancellation. Please try again.",
+                502,
+                exception);
+        }
+    }
+
     public async Task ProcessWebhookAsync(
         string payload,
         string signature,
@@ -317,7 +366,10 @@ internal sealed class StripeBillingService(
         user.MembershipPlan = hasPaidAccess
             ? MembershipPlanCatalog.FoundingPlanId
             : MembershipPlanCatalog.FreePlanId;
-        user.MembershipStatus = ToMembershipStatus(status);
+        var cancelsAtPeriodEnd = ReadBoolean(subscription, "cancel_at_period_end");
+        user.MembershipStatus = hasPaidAccess && cancelsAtPeriodEnd
+            ? "Canceling"
+            : ToMembershipStatus(status);
         user.MembershipStartedAt = hasPaidAccess
             ? user.MembershipStartedAt ?? eventCreatedAt
             : user.MembershipStartedAt;
@@ -390,7 +442,9 @@ internal sealed class StripeBillingService(
 
     private static bool IsPaidMembership(string plan, string status) =>
         plan is MembershipPlanCatalog.FoundingPlanId or MembershipPlanCatalog.StandardPlanId &&
-        status.Equals("Active", StringComparison.OrdinalIgnoreCase);
+        (status.Equals("Active", StringComparison.OrdinalIgnoreCase) ||
+         status.Equals("Trialing", StringComparison.OrdinalIgnoreCase) ||
+         status.Equals("Canceling", StringComparison.OrdinalIgnoreCase));
 
     private static string ToMembershipStatus(string stripeStatus) => stripeStatus switch
     {
@@ -417,6 +471,10 @@ internal sealed class StripeBillingService(
             ? property.GetString()
             : property.ToString();
     }
+
+    private static bool ReadBoolean(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind == JsonValueKind.True;
 
     private static string? ReadMetadata(JsonElement element, string key)
     {

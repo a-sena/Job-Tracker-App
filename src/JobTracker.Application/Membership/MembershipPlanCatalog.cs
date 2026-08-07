@@ -5,7 +5,7 @@ public static class MembershipPlanCatalog
     public const string FreePlanId = "Free";
     public const string FoundingPlanId = "FoundingMember";
     public const string StandardPlanId = "Standard";
-    public const int FreeFeatureLimit = 1;
+    public const int FreeLifetimeAiActionLimit = 4;
     public const int PaidMonthlyAiActionLimit = 40;
 
     public static IReadOnlyList<MembershipPlanDto> GetPlans() =>
@@ -22,10 +22,10 @@ public static class MembershipPlanCatalog
             true,
             [
                 "Unlimited manual application tracking",
-                "One lifetime CV match review",
-                "One lifetime AI-tailored CV",
-                "One interview preparation set",
-                "One cover letter"
+                "Four lifetime AI actions",
+                "Use them for CV reviews or tailored CVs",
+                "Use them for interview preparation or cover letters",
+                "No payment card required"
             ]),
         new(
             FoundingPlanId,

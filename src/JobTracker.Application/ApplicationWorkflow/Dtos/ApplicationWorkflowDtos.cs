@@ -54,9 +54,11 @@ public sealed record ApplicationDraftDto(
     CoverLetterDto? CoverLetter,
     string? CoverLetterPdfFileName,
     IReadOnlyList<string> InterviewQuestions,
+    IReadOnlyList<string> InterviewAnswers,
     string? InterviewQuestionsPdfFileName,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? MasterCvName);
 
 public sealed record ApplicationCategoryDto(
     Guid Id,
@@ -94,3 +96,27 @@ public sealed record CoverLetterDto(
 public sealed record CoverLetterEvidenceDto(
     string Claim,
     string EvidenceText);
+
+public sealed class SaveInterviewAnswersRequest : IValidatableObject
+{
+    [Required, MaxLength(50)]
+    public IReadOnlyList<string> Answers { get; init; } = [];
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (Answers is null)
+        {
+            yield break;
+        }
+
+        for (var index = 0; index < Answers.Count; index++)
+        {
+            if ((Answers[index] ?? string.Empty).Length > 5_000)
+            {
+                yield return new ValidationResult(
+                    $"Answer {index + 1} cannot exceed 5,000 characters.",
+                    [nameof(Answers)]);
+            }
+        }
+    }
+}

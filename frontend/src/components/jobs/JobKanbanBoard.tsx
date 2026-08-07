@@ -18,6 +18,18 @@ export const JOB_STATUSES = [
 
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
+export type WorkArrangement = "Unspecified" | "OnSite" | "Hybrid" | "Remote";
+
+interface EditableJobDetails {
+  location: string;
+  recruiterName: string;
+  recruiterEmail: string;
+  recruiterLinkedInUrl: string;
+  salaryRange: string;
+  workArrangement: WorkArrangement;
+  personalNotes: string;
+}
+
 export interface JobApplication {
   id: string;
   title: string;
@@ -25,6 +37,12 @@ export interface JobApplication {
   jobUrl: string;
   description: string;
   location: string | null;
+  recruiterName: string | null;
+  recruiterEmail: string | null;
+  recruiterLinkedInUrl: string | null;
+  salaryRange: string | null;
+  workArrangement: WorkArrangement;
+  personalNotes: string | null;
   categoryName: string | null;
   appliedDate: string;
   atsMatchScore: number | null;
@@ -43,6 +61,8 @@ interface CvRequirement {
 
 interface LoggedApplicationPackage {
   id: string;
+  masterCvId: string | null;
+  masterCvName: string | null;
   originalAtsScore: number | null;
   originalMatchedKeywords: string[];
   originalMissingKeywords: string[];
@@ -66,7 +86,19 @@ interface LoggedApplicationPackage {
   } | null;
   coverLetterPdfFileName: string | null;
   interviewQuestions: string[];
+  interviewAnswers: string[];
   interviewQuestionsPdfFileName: string | null;
+}
+
+interface UpdatedJobDetailsResponse {
+  description: string;
+  location: string | null;
+  recruiterName: string | null;
+  recruiterEmail: string | null;
+  recruiterLinkedInUrl: string | null;
+  salaryRange: string | null;
+  workArrangement: WorkArrangement;
+  personalNotes: string | null;
 }
 
 export interface JobKanbanBoardProps {
@@ -92,6 +124,8 @@ export interface JobKanbanBoardProps {
    * rollback-style toast on the card.
    */
   onGenerateTailoredCv?: (jobId: string) => Promise<void>;
+  /** Keeps the parent job collection synchronized after metadata edits. */
+  onApplicationDetailsUpdated?: (job: JobApplication) => void;
   /** Invoked after an application and its saved preparation were deleted. */
   onApplicationDeleted?: (jobId: string) => void;
 }
@@ -276,6 +310,19 @@ function formatAppliedDate(value: string): string {
   return format(parsedDate, "dd. MMM yyyy", { locale: nb });
 }
 
+function workArrangementLabel(value: WorkArrangement): string {
+  switch (value) {
+    case "OnSite":
+      return "On-site";
+    case "Hybrid":
+      return "Hybrid";
+    case "Remote":
+      return "Remote";
+    default:
+      return "Not specified";
+  }
+}
+
 function getAtsBadge(score: number | null): {
   label: string;
   className: string;
@@ -327,7 +374,8 @@ function isSafePdfUrl(value: string | null | undefined): value is string {
   }
 }
 
-function isSafeExternalUrl(value: string): boolean {
+function isSafeExternalUrl(value: string | null | undefined): value is string {
+  if (!value) return false;
   try {
     const parsedUrl = new URL(value);
     return parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
@@ -396,6 +444,9 @@ function ApplicationDetailsModal({
   error,
   apiBaseUrl,
   isDeleting,
+  onSaveDetails,
+  onSaveDescription,
+  onSaveInterviewAnswers,
   onDelete,
   onClose,
 }: {
@@ -405,10 +456,104 @@ function ApplicationDetailsModal({
   error: string | null;
   apiBaseUrl: string;
   isDeleting: boolean;
+  onSaveDetails: (details: EditableJobDetails) => Promise<void>;
+  onSaveDescription: (description: string) => Promise<void>;
+  onSaveInterviewAnswers: (answers: string[]) => Promise<void>;
   onDelete: () => void;
   onClose: () => void;
 }): JSX.Element {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState(job.description);
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
+  const [interviewAnswers, setInterviewAnswers] = useState<string[]>([]);
+  const [isSavingAnswers, setIsSavingAnswers] = useState(false);
+  const [answerError, setAnswerError] = useState<string | null>(null);
+  const [editableDetails, setEditableDetails] = useState<EditableJobDetails>(() => ({
+    location: job.location ?? "",
+    recruiterName: job.recruiterName ?? "",
+    recruiterEmail: job.recruiterEmail ?? "",
+    recruiterLinkedInUrl: job.recruiterLinkedInUrl ?? "",
+    salaryRange: job.salaryRange ?? "",
+    workArrangement: job.workArrangement,
+    personalNotes: job.personalNotes ?? "",
+  }));
+
+  useEffect(() => {
+    setInterviewAnswers(
+      applicationPackage?.interviewQuestions.map(
+        (_, index) => applicationPackage.interviewAnswers?.[index] ?? "",
+      ) ?? [],
+    );
+    setAnswerError(null);
+  }, [applicationPackage?.id]);
+
+  useEffect(() => {
+    setDescriptionDraft(job.description);
+    setDescriptionError(null);
+    setIsEditingDescription(false);
+  }, [job.id, job.description]);
+
+  async function saveDetails(): Promise<void> {
+    setSaveError(null);
+    setIsSavingDetails(true);
+    try {
+      await onSaveDetails(editableDetails);
+      setIsEditingDetails(false);
+    } catch (saveDetailsError) {
+      setSaveError(
+        saveDetailsError instanceof Error
+          ? saveDetailsError.message
+          : "Application details could not be saved.",
+      );
+    } finally {
+      setIsSavingDetails(false);
+    }
+  }
+
+  async function saveAnswers(): Promise<void> {
+    setAnswerError(null);
+    setIsSavingAnswers(true);
+    try {
+      await onSaveInterviewAnswers(interviewAnswers);
+    } catch (saveAnswersError) {
+      setAnswerError(
+        saveAnswersError instanceof Error
+          ? saveAnswersError.message
+          : "Interview answers could not be saved.",
+      );
+    } finally {
+      setIsSavingAnswers(false);
+    }
+  }
+
+  async function saveDescription(): Promise<void> {
+    const normalizedDescription = descriptionDraft.trim();
+    if (!normalizedDescription) {
+      setDescriptionError("The vacancy description cannot be empty.");
+      return;
+    }
+
+    setDescriptionError(null);
+    setIsSavingDescription(true);
+    try {
+      await onSaveDescription(normalizedDescription);
+      setDescriptionDraft(normalizedDescription);
+      setIsEditingDescription(false);
+    } catch (saveDescriptionError) {
+      setDescriptionError(
+        saveDescriptionError instanceof Error
+          ? saveDescriptionError.message
+          : "The vacancy description could not be saved.",
+      );
+    } finally {
+      setIsSavingDescription(false);
+    }
+  }
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -519,14 +664,299 @@ function ApplicationDetailsModal({
             )}
           </section>
 
-          <details open className="rounded-md border-2 border-[#172033] bg-white p-4">
-            <summary className="cursor-pointer text-sm font-black uppercase tracking-[0.08em]">
-              Full vacancy description
-            </summary>
-            <div className="mt-4 max-h-96 overflow-y-auto whitespace-pre-wrap border-t border-[#deded9] pt-4 text-sm leading-6 text-[#404658]">
-              {job.description}
+          <section className="overflow-hidden rounded-xl border-2 border-[#172033] bg-[#fffdf8] shadow-[4px_4px_0_#ffcc4d]">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-[#172033] bg-gradient-to-r from-[#eef2ff] via-white to-[#fff4cb] px-4 py-4 sm:px-5">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#3157d5]">
+                  Application information
+                </p>
+                <h3 className="mt-1 text-xl font-black">Application details</h3>
+                <p className="mt-1 text-xs font-medium text-[#626979]">
+                  Keep the practical details and your own follow-up notes together.
+                </p>
+              </div>
+              {!isEditingDetails ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSaveError(null);
+                    setIsEditingDetails(true);
+                  }}
+                  className="rounded-full border-2 border-[#172033] bg-white px-4 py-2 text-xs font-black text-[#172033] shadow-[2px_2px_0_#3157d5] transition hover:-translate-y-0.5 hover:bg-[#3157d5] hover:text-white"
+                >
+                  Edit details
+                </button>
+              ) : null}
             </div>
-          </details>
+
+            {isEditingDetails ? (
+              <div className="m-4 rounded-xl border border-[#cfd5e7] bg-[#f7f8ff] p-4 sm:m-5 sm:p-5">
+                <div className="mb-4 flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#3157d5] text-sm font-black text-white">1</span>
+                  <div>
+                    <h4 className="text-sm font-black">Contact and role information</h4>
+                    <p className="text-[11px] text-[#626979]">Add only the information useful for following up this application.</p>
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="text-xs font-black text-[#3f4657]">
+                    Recruiter name
+                    <input
+                      type="text"
+                      maxLength={200}
+                      value={editableDetails.recruiterName}
+                      onChange={(event) => setEditableDetails((current) => ({ ...current, recruiterName: event.target.value }))}
+                      placeholder="Name of recruiter or hiring contact"
+                      className="mt-1.5 w-full rounded-lg border border-[#b9c1d9] bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dce4ff]"
+                    />
+                  </label>
+                  <label className="text-xs font-black text-[#3f4657]">
+                    Recruiter email
+                    <input
+                      type="email"
+                      maxLength={320}
+                      value={editableDetails.recruiterEmail}
+                      onChange={(event) => setEditableDetails((current) => ({ ...current, recruiterEmail: event.target.value }))}
+                      placeholder="name@company.com"
+                      className="mt-1.5 w-full rounded-lg border border-[#b9c1d9] bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dce4ff]"
+                    />
+                  </label>
+                  <label className="text-xs font-black text-[#3f4657]">
+                    Recruiter LinkedIn
+                    <input
+                      type="url"
+                      maxLength={2048}
+                      value={editableDetails.recruiterLinkedInUrl}
+                      onChange={(event) => setEditableDetails((current) => ({ ...current, recruiterLinkedInUrl: event.target.value }))}
+                      placeholder="https://www.linkedin.com/in/..."
+                      className="mt-1.5 w-full rounded-lg border border-[#b9c1d9] bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dce4ff]"
+                    />
+                  </label>
+                  <label className="text-xs font-black text-[#3f4657]">
+                    Salary range
+                    <input
+                      type="text"
+                      maxLength={200}
+                      value={editableDetails.salaryRange}
+                      onChange={(event) => setEditableDetails((current) => ({ ...current, salaryRange: event.target.value }))}
+                      placeholder="For example, 550,000–650,000 NOK"
+                      className="mt-1.5 w-full rounded-lg border border-[#b9c1d9] bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dce4ff]"
+                    />
+                  </label>
+                  <label className="text-xs font-black text-[#3f4657]">
+                    Work arrangement
+                    <select
+                      value={editableDetails.workArrangement}
+                      onChange={(event) => setEditableDetails((current) => ({ ...current, workArrangement: event.target.value as WorkArrangement }))}
+                      className="mt-1.5 w-full rounded-lg border border-[#b9c1d9] bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dce4ff]"
+                    >
+                      <option value="Unspecified">Not specified</option>
+                      <option value="OnSite">On-site</option>
+                      <option value="Hybrid">Hybrid</option>
+                      <option value="Remote">Remote</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-black text-[#3f4657]">
+                    Location
+                    <input
+                      type="text"
+                      maxLength={200}
+                      value={editableDetails.location}
+                      onChange={(event) => setEditableDetails((current) => ({ ...current, location: event.target.value }))}
+                      placeholder="For example, Oslo"
+                      className="mt-1.5 w-full rounded-lg border border-[#b9c1d9] bg-white px-3 py-2.5 text-sm font-medium outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dce4ff]"
+                    />
+                  </label>
+                </div>
+                <label className="mt-5 block rounded-lg border border-[#efd37e] bg-[#fff9e7] p-4 text-xs font-black text-[#3f4657]">
+                  Personal notes
+                  <textarea
+                    rows={5}
+                    maxLength={10_000}
+                    value={editableDetails.personalNotes}
+                    onChange={(event) => setEditableDetails((current) => ({ ...current, personalNotes: event.target.value }))}
+                    placeholder="Add follow-up notes, interview impressions, or anything you want to remember."
+                    className="mt-2 w-full resize-y rounded-lg border border-[#d4bc74] bg-white px-3 py-2.5 text-sm font-medium leading-6 outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#ffe9a8]"
+                  />
+                </label>
+                {saveError ? (
+                  <p role="alert" className="mt-3 rounded-md border border-[#dca399] bg-[#fff1ee] px-3 py-2 text-xs font-bold text-[#8b3d32]">
+                    {saveError}
+                  </p>
+                ) : null}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={isSavingDetails}
+                    onClick={() => void saveDetails()}
+                    className="rounded-full border-2 border-[#172033] bg-[#3157d5] px-5 py-2.5 text-xs font-black text-white shadow-[2px_2px_0_#172033] transition hover:-translate-y-0.5 hover:bg-[#2448bb] disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {isSavingDetails ? "Saving…" : "Save details"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingDetails}
+                    onClick={() => {
+                      setEditableDetails({
+                        location: job.location ?? "",
+                        recruiterName: job.recruiterName ?? "",
+                        recruiterEmail: job.recruiterEmail ?? "",
+                        recruiterLinkedInUrl: job.recruiterLinkedInUrl ?? "",
+                        salaryRange: job.salaryRange ?? "",
+                        workArrangement: job.workArrangement,
+                        personalNotes: job.personalNotes ?? "",
+                      });
+                      setSaveError(null);
+                      setIsEditingDetails(false);
+                    }}
+                    className="rounded-full border border-[#aeb4c2] bg-white px-5 py-2.5 text-xs font-black text-[#555d6d] transition hover:border-[#172033] hover:text-[#172033]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[1.05fr_1.4fr]">
+                <article className="relative overflow-hidden rounded-xl border border-[#aebbe7] bg-[#eef2ff] p-4">
+                  <div className="absolute right-0 top-0 h-16 w-16 translate-x-5 -translate-y-5 rounded-full bg-[#ff6b57]/30" />
+                  <div className="relative flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-[#172033] bg-[#ff6b57] text-sm font-black text-white">
+                      {job.recruiterName?.trim().charAt(0).toUpperCase() || "?"}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#3157d5]">Hiring contact</p>
+                      <p className="mt-1 truncate text-base font-black text-[#172033]">
+                        {job.recruiterName || "No recruiter added"}
+                      </p>
+                      {!job.recruiterEmail && !isSafeExternalUrl(job.recruiterLinkedInUrl) ? (
+                        <p className="mt-2 text-xs leading-5 text-[#626979]">Add a contact when you know who is handling the role.</p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="relative mt-4 flex flex-wrap gap-2">
+                    {job.recruiterEmail ? (
+                      <a className="rounded-full border border-[#9cace5] bg-white px-3 py-1.5 text-xs font-black text-[#3157d5] transition hover:border-[#3157d5]" href={`mailto:${job.recruiterEmail}`}>
+                        Email contact
+                      </a>
+                    ) : null}
+                    {isSafeExternalUrl(job.recruiterLinkedInUrl) ? (
+                      <a className="rounded-full border border-[#9cace5] bg-white px-3 py-1.5 text-xs font-black text-[#3157d5] transition hover:border-[#3157d5]" href={job.recruiterLinkedInUrl} target="_blank" rel="noreferrer">
+                        View LinkedIn ↗
+                      </a>
+                    ) : null}
+                  </div>
+                </article>
+
+                <article className="rounded-xl border border-[#e7c65f] bg-[#fff7d9] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#80600d]">Role snapshot</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-lg bg-white/80 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-wide text-[#8b7440]">Salary</p>
+                      <p className="mt-1 break-words text-sm font-black text-[#172033]">{job.salaryRange || "Not added"}</p>
+                    </div>
+                    <div className="rounded-lg bg-white/80 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-wide text-[#8b7440]">Work style</p>
+                      <p className="mt-1 text-sm font-black text-[#172033]">{workArrangementLabel(job.workArrangement)}</p>
+                    </div>
+                    <div className="rounded-lg bg-white/80 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-wide text-[#8b7440]">Location</p>
+                      <p className="mt-1 break-words text-sm font-black text-[#172033]">{job.location || "Not added"}</p>
+                    </div>
+                  </div>
+                </article>
+
+                <article className="rounded-xl border border-[#9fc9ae] bg-[#edf7ef] p-4 lg:col-span-2">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#2f7d4a]" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#315f3d]">Personal notes</p>
+                  </div>
+                  <p className={`mt-2 whitespace-pre-wrap text-sm leading-6 ${job.personalNotes ? "text-[#3f5145]" : "italic text-[#6f7e73]"}`}>
+                    {job.personalNotes || "No notes yet. Add reminders, follow-up dates, or interview impressions here."}
+                  </p>
+                </article>
+              </div>
+            )}
+          </section>
+
+          <section className="overflow-hidden rounded-xl border-2 border-[#172033] bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#d9dce5] bg-[#f7f8fc] px-4 py-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#777b84]">Vacancy</p>
+                <h3 className="mt-0.5 text-sm font-black">Full vacancy description</h3>
+              </div>
+              {!isEditingDescription ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDescriptionDraft(job.description);
+                    setDescriptionError(null);
+                    setIsEditingDescription(true);
+                  }}
+                  className="rounded-full border border-[#aeb4c2] bg-white px-3 py-1.5 text-xs font-black text-[#3157d5] transition hover:border-[#3157d5] hover:bg-[#eef2ff]"
+                >
+                  Edit description
+                </button>
+              ) : null}
+            </div>
+
+            {isEditingDescription ? (
+              <div className="p-4">
+                <label className="block text-xs font-black text-[#3f4657]">
+                  Vacancy description
+                  <textarea
+                    autoFocus
+                    required
+                    rows={14}
+                    maxLength={100_000}
+                    value={descriptionDraft}
+                    onChange={(event) => setDescriptionDraft(event.target.value)}
+                    className="mt-2 w-full resize-y rounded-lg border-2 border-[#b9c1d9] bg-[#fffdf8] px-3 py-3 text-sm font-medium leading-6 text-[#404658] outline-none transition focus:border-[#3157d5] focus:ring-2 focus:ring-[#dce4ff]"
+                  />
+                </label>
+                <div className="mt-2 flex items-center justify-between gap-3 text-[10px] font-semibold text-[#777b84]">
+                  <span>Keep the original requirements and responsibilities accurate.</span>
+                  <span>{descriptionDraft.length.toLocaleString()} / 100,000</span>
+                </div>
+                {descriptionError ? (
+                  <p role="alert" className="mt-3 rounded-md border border-[#dca399] bg-[#fff1ee] px-3 py-2 text-xs font-bold text-[#8b3d32]">
+                    {descriptionError}
+                  </p>
+                ) : null}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={isSavingDescription || !descriptionDraft.trim()}
+                    onClick={() => void saveDescription()}
+                    className="rounded-full border-2 border-[#172033] bg-[#3157d5] px-5 py-2.5 text-xs font-black text-white shadow-[2px_2px_0_#172033] transition hover:-translate-y-0.5 hover:bg-[#2448bb] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSavingDescription ? "Saving…" : "Save description"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingDescription}
+                    onClick={() => {
+                      setDescriptionDraft(job.description);
+                      setDescriptionError(null);
+                      setIsEditingDescription(false);
+                    }}
+                    className="rounded-full border border-[#aeb4c2] bg-white px-5 py-2.5 text-xs font-black text-[#555d6d] transition hover:border-[#172033]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <details open className="group">
+                <summary className="cursor-pointer list-none px-4 py-3 text-xs font-black text-[#3157d5] marker:hidden">
+                  <span className="group-open:hidden">Show description</span>
+                  <span className="hidden group-open:inline">Hide description</span>
+                </summary>
+                <div className="max-h-96 overflow-y-auto whitespace-pre-wrap border-t border-[#e3e4e8] px-4 py-4 text-sm leading-6 text-[#404658]">
+                  {job.description}
+                </div>
+              </details>
+            )}
+          </section>
 
           {isLoading ? (
             <div className="animate-pulse rounded-md border-2 border-[#9ca1ad] bg-white p-5 text-sm font-bold text-[#626979]">
@@ -538,7 +968,8 @@ function ApplicationDetailsModal({
             </div>
           ) : applicationPackage ? (
             <>
-              <section className="rounded-md border-2 border-[#172033] bg-white p-4 sm:p-5">
+              <div className="grid gap-4 lg:grid-cols-2">
+              <section className="order-2 rounded-md border-2 border-[#172033] bg-white p-4 sm:p-5 lg:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="text-lg font-black">ATS review</h3>
                   {applicationPackage.originalReviewDetails ? (
@@ -656,9 +1087,26 @@ function ApplicationDetailsModal({
                 ) : null}
               </section>
 
-              <section className="grid gap-4 lg:grid-cols-2">
-                <article className="rounded-md border-2 border-[#172033] bg-white p-4">
+              <section className="contents">
+                <article className="order-1 rounded-md border-2 border-[#172033] bg-white p-4 lg:col-span-2">
                   <h3 className="font-black">Saved documents</h3>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-md border border-[#d9d9d3] bg-[#f8f7f2] p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-[#777b84]">CV used</p>
+                      <p className="mt-1 text-xs font-bold text-[#3f4657]">
+                        {applicationPackage.masterCvName || "Source CV name unavailable"}
+                      </p>
+                      <p className="mt-1 text-[10px] font-semibold text-[#777b84]">
+                        {job.tailoredPdfUrl ? "Tailored version prepared for this role" : "Original selected CV"}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-[#d9d9d3] bg-[#f8f7f2] p-3">
+                      <p className="text-[10px] font-black uppercase tracking-wide text-[#777b84]">Cover letter</p>
+                      <p className="mt-1 text-xs font-bold text-[#3f4657]">
+                        {coverLetterPdfUrl ? "Saved for this application" : "Not created"}
+                      </p>
+                    </div>
+                  </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {job.tailoredPdfUrl ? (
                       <a href={job.tailoredPdfUrl} target="_blank" rel="noreferrer" className="rounded-md border-2 border-[#172033] bg-[#eef2ff] px-3 py-2 text-xs font-black">
@@ -689,7 +1137,7 @@ function ApplicationDetailsModal({
                   ) : null}
                 </article>
 
-                <article className="rounded-md border-2 border-[#172033] bg-white p-4">
+                <article className="order-3 rounded-md border-2 border-[#172033] bg-white p-4 lg:col-span-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="font-black">Interview preparation</h3>
                     {questionsPdfUrl ? (
@@ -699,14 +1147,44 @@ function ApplicationDetailsModal({
                     ) : null}
                   </div>
                   {applicationPackage.interviewQuestions.length ? (
-                    <ol className="mt-3 space-y-2">
-                      {applicationPackage.interviewQuestions.map((question, index) => (
-                        <li key={`${index}-${question}`} className="flex gap-2 text-xs leading-5 text-[#4f5665]">
-                          <span className="font-black text-[#3157d5]">{index + 1}.</span>
-                          <span>{question}</span>
-                        </li>
-                      ))}
-                    </ol>
+                    <>
+                      <ol className="mt-3 space-y-3">
+                        {applicationPackage.interviewQuestions.map((question, index) => (
+                          <li key={`${index}-${question}`} className="rounded-md border border-[#d9d9d3] bg-[#f8f7f2] p-3">
+                            <div className="flex gap-2 text-xs leading-5 text-[#4f5665]">
+                              <span className="font-black text-[#3157d5]">{index + 1}.</span>
+                              <span className="font-bold">{question}</span>
+                            </div>
+                            <label className="mt-2 block text-[9px] font-black uppercase tracking-wide text-[#777b84]">
+                              Your answer
+                              <textarea
+                                rows={3}
+                                maxLength={5_000}
+                                value={interviewAnswers[index] ?? ""}
+                                onChange={(event) => setInterviewAnswers((current) => applicationPackage.interviewQuestions.map(
+                                  (_, answerIndex) => answerIndex === index ? event.target.value : current[answerIndex] ?? "",
+                                ))}
+                                placeholder="Add your example or talking points…"
+                                className="mt-1.5 w-full resize-y rounded-md border border-[#bfc2ca] bg-white px-3 py-2 text-xs font-medium normal-case leading-5 tracking-normal text-[#3f4657] outline-none focus:border-[#3157d5]"
+                              />
+                            </label>
+                          </li>
+                        ))}
+                      </ol>
+                      {answerError ? (
+                        <p role="alert" className="mt-3 rounded-md border border-[#dca399] bg-[#fff1ee] px-3 py-2 text-xs font-bold text-[#8b3d32]">
+                          {answerError}
+                        </p>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={isSavingAnswers}
+                        onClick={() => void saveAnswers()}
+                        className="mt-3 rounded-md border-2 border-[#172033] bg-[#3157d5] px-3 py-2 text-xs font-black text-white transition hover:bg-[#2448bb] disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {isSavingAnswers ? "Saving answers…" : "Save my answers"}
+                      </button>
+                    </>
                   ) : (
                     <p className="mt-3 text-xs text-[#626979]">
                       No interview questions were generated for this application.
@@ -714,6 +1192,7 @@ function ApplicationDetailsModal({
                   )}
                 </article>
               </section>
+              </div>
             </>
           ) : (
             <div className="rounded-md border-2 border-[#b8bac0] bg-white p-4 text-sm text-[#626979]">
@@ -752,6 +1231,7 @@ export function JobKanbanBoard({
   apiBaseUrl = "",
   onStatusChangeConfirmed,
   onGenerateTailoredCv,
+  onApplicationDetailsUpdated,
   onApplicationDeleted,
 }: JobKanbanBoardProps): JSX.Element {
   const [jobsByStatus, setJobsByStatus] = useState<JobsByStatus>(() =>
@@ -998,6 +1478,149 @@ export function JobKanbanBoard({
     [apiBaseUrl],
   );
 
+  const saveApplicationDetails = useCallback(
+    async (details: EditableJobDetails): Promise<void> => {
+      if (!selectedJob) throw new Error("The selected application is no longer available.");
+
+      const response = await apiFetch(
+        apiBaseUrl,
+        `/api/jobs/${encodeURIComponent(selectedJob.id)}/details`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(details),
+        },
+      );
+      if (!response.ok) {
+        let message = `Saving application details failed with HTTP ${response.status}.`;
+        try {
+          const problem = (await response.json()) as { detail?: string; title?: string; errors?: Record<string, string[]> };
+          message = Object.values(problem.errors ?? {}).flat().join(" ") || problem.detail || problem.title || message;
+        } catch {
+          // Keep the bounded fallback when the response is not JSON.
+        }
+        throw new Error(message);
+      }
+
+      const updated = (await response.json()) as UpdatedJobDetailsResponse;
+      const mergeDetails = (job: JobApplication): JobApplication => ({
+        ...job,
+        description: updated.description,
+        location: updated.location,
+        recruiterName: updated.recruiterName,
+        recruiterEmail: updated.recruiterEmail,
+        recruiterLinkedInUrl: updated.recruiterLinkedInUrl,
+        salaryRange: updated.salaryRange,
+        workArrangement: updated.workArrangement,
+        personalNotes: updated.personalNotes,
+      });
+      const updatedJob = mergeDetails(selectedJob);
+
+      setJobsByStatus((current) => ({
+        Applied: current.Applied.map((job) => job.id === selectedJob.id ? mergeDetails(job) : job),
+        Interviewing: current.Interviewing.map((job) => job.id === selectedJob.id ? mergeDetails(job) : job),
+        Offer: current.Offer.map((job) => job.id === selectedJob.id ? mergeDetails(job) : job),
+        Rejected: current.Rejected.map((job) => job.id === selectedJob.id ? mergeDetails(job) : job),
+      }));
+      setSelectedJob(updatedJob);
+      onApplicationDetailsUpdated?.(updatedJob);
+      setToast({ id: Date.now(), message: `Details for “${selectedJob.title}” were saved.` });
+    },
+    [apiBaseUrl, onApplicationDetailsUpdated, selectedJob],
+  );
+
+  const saveApplicationDescription = useCallback(
+    async (description: string): Promise<void> => {
+      if (!selectedJob) throw new Error("The selected application is no longer available.");
+
+      const response = await apiFetch(
+        apiBaseUrl,
+        `/api/jobs/${encodeURIComponent(selectedJob.id)}/details`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            description,
+            location: selectedJob.location,
+            recruiterName: selectedJob.recruiterName,
+            recruiterEmail: selectedJob.recruiterEmail,
+            recruiterLinkedInUrl: selectedJob.recruiterLinkedInUrl,
+            salaryRange: selectedJob.salaryRange,
+            workArrangement: selectedJob.workArrangement,
+            personalNotes: selectedJob.personalNotes,
+          }),
+        },
+      );
+      if (!response.ok) {
+        let message = `Saving the vacancy description failed with HTTP ${response.status}.`;
+        try {
+          const problem = (await response.json()) as { detail?: string; title?: string; errors?: Record<string, string[]> };
+          message = Object.values(problem.errors ?? {}).flat().join(" ") || problem.detail || problem.title || message;
+        } catch {
+          // Keep the fallback when an intermediary returns a non-JSON body.
+        }
+        throw new Error(message);
+      }
+
+      const updated = (await response.json()) as UpdatedJobDetailsResponse;
+      const mergeDescription = (job: JobApplication): JobApplication => ({
+        ...job,
+        description: updated.description,
+      });
+      const updatedJob = mergeDescription(selectedJob);
+
+      setJobsByStatus((current) => ({
+        Applied: current.Applied.map((job) => job.id === selectedJob.id ? mergeDescription(job) : job),
+        Interviewing: current.Interviewing.map((job) => job.id === selectedJob.id ? mergeDescription(job) : job),
+        Offer: current.Offer.map((job) => job.id === selectedJob.id ? mergeDescription(job) : job),
+        Rejected: current.Rejected.map((job) => job.id === selectedJob.id ? mergeDescription(job) : job),
+      }));
+      setSelectedJob(updatedJob);
+      onApplicationDetailsUpdated?.(updatedJob);
+      setToast({ id: Date.now(), message: `The vacancy description for “${selectedJob.title}” was saved.` });
+    },
+    [apiBaseUrl, onApplicationDetailsUpdated, selectedJob],
+  );
+
+  const saveLoggedInterviewAnswers = useCallback(
+    async (answers: string[]): Promise<void> => {
+      if (!applicationPackage) {
+        throw new Error("The saved interview preparation is no longer available.");
+      }
+
+      const response = await apiFetch(
+        apiBaseUrl,
+        `/api/application-workflow/draft/${encodeURIComponent(applicationPackage.id)}/interview-answers`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ answers }),
+        },
+      );
+      if (!response.ok) {
+        let message = `Saving interview answers failed with HTTP ${response.status}.`;
+        try {
+          const problem = (await response.json()) as { detail?: string; title?: string; errors?: Record<string, string[]> };
+          message = Object.values(problem.errors ?? {}).flat().join(" ") || problem.detail || problem.title || message;
+        } catch {
+          // Keep the fallback when an intermediary returns a non-JSON body.
+        }
+        throw new Error(message);
+      }
+
+      const updated = (await response.json()) as LoggedApplicationPackage;
+      setApplicationPackage({
+        ...updated,
+        interviewQuestions: updated.interviewQuestions ?? [],
+        interviewAnswers: (updated.interviewQuestions ?? []).map(
+          (_, index) => updated.interviewAnswers?.[index] ?? "",
+        ),
+      });
+      setToast({ id: Date.now(), message: "Your interview answers were saved." });
+    },
+    [apiBaseUrl, applicationPackage],
+  );
+
   const deleteApplication = useCallback(
     async (job: JobApplication): Promise<void> => {
       const confirmed = window.confirm(
@@ -1157,6 +1780,14 @@ export function JobKanbanBoard({
                                   </div>
                                 ) : null}
 
+                                {job.location || job.workArrangement !== "Unspecified" || job.salaryRange ? (
+                                  <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] font-bold text-[#5f6675]">
+                                    {job.location ? <span className="rounded bg-[#f0efe9] px-2 py-1">{job.location}</span> : null}
+                                    {job.workArrangement !== "Unspecified" ? <span className="rounded bg-[#f0efe9] px-2 py-1">{workArrangementLabel(job.workArrangement)}</span> : null}
+                                    {job.salaryRange ? <span className="max-w-full truncate rounded bg-[#fff4cb] px-2 py-1" title={job.salaryRange}>{job.salaryRange}</span> : null}
+                                  </div>
+                                ) : null}
+
                                 {job.missingKeywords.length > 0 ? (
                                   <p
                                     className="mt-3 line-clamp-2 text-[11px] leading-4 text-slate-500"
@@ -1273,6 +1904,9 @@ export function JobKanbanBoard({
           error={detailsError}
           apiBaseUrl={apiBaseUrl}
           isDeleting={deletingJobIds.has(selectedJob.id)}
+          onSaveDetails={saveApplicationDetails}
+          onSaveDescription={saveApplicationDescription}
+          onSaveInterviewAnswers={saveLoggedInterviewAnswers}
           onDelete={() => void deleteApplication(selectedJob)}
           onClose={closeDetails}
         />

@@ -28,6 +28,27 @@ public sealed class BillingController(IBillingService billingService) : Controll
         ExecuteAsync(() => billingService.CreateCustomerPortalSessionAsync(
             cancellationToken));
 
+    [Authorize]
+    [HttpPost("cancel")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CancelSubscription(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await billingService.CancelSubscriptionAtPeriodEndAsync(cancellationToken);
+            return NoContent();
+        }
+        catch (BillingException exception)
+        {
+            return Problem(
+                statusCode: exception.StatusCode,
+                title: "Membership cancellation failed",
+                detail: exception.Message);
+        }
+    }
+
     [AllowAnonymous]
     [IgnoreAntiforgeryToken]
     [HttpPost("webhook")]

@@ -185,6 +185,26 @@ public sealed class JobsController(
     }
 
     /// <summary>
+    /// Updates user-managed vacancy, recruiter, compensation, and note details.
+    /// </summary>
+    [HttpPut("{id:guid}/details")]
+    [ProducesResponseType<JobApplicationDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<JobApplicationDto>> UpdateDetails(
+        Guid id,
+        [FromBody] UpdateJobDetailsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var updatedJob = await jobApplicationService.UpdateDetailsAsync(
+            id,
+            request,
+            cancellationToken);
+
+        return updatedJob is null ? NotFound() : Ok(updatedJob);
+    }
+
+    /// <summary>
     /// Permanently removes a tracked application, tailored CVs, and saved preparation artifacts.
     /// </summary>
     [HttpDelete("{id:guid}")]

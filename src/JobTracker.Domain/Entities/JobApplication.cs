@@ -17,7 +17,13 @@ public sealed class JobApplication
         string title,
         string company,
         string description,
-        string? location)
+        string? location,
+        string? recruiterName,
+        string? recruiterEmail,
+        string? recruiterLinkedInUrl,
+        string? salaryRange,
+        WorkArrangement workArrangement,
+        string? personalNotes)
     {
         Id = Guid.NewGuid();
         UserId = userId;
@@ -25,7 +31,15 @@ public sealed class JobApplication
         Title = title;
         Company = company;
         Description = description;
-        Location = location;
+        UpdateDetails(
+            location,
+            recruiterName,
+            recruiterEmail,
+            recruiterLinkedInUrl,
+            salaryRange,
+            workArrangement,
+            personalNotes,
+            touchUpdatedAt: false);
         Status = JobApplicationStatus.Applied;
         CreatedAt = DateTimeOffset.UtcNow;
         UpdatedAt = CreatedAt;
@@ -48,6 +62,18 @@ public sealed class JobApplication
 
     public string? Location { get; private set; }
 
+    public string? RecruiterName { get; private set; }
+
+    public string? RecruiterEmail { get; private set; }
+
+    public string? RecruiterLinkedInUrl { get; private set; }
+
+    public string? SalaryRange { get; private set; }
+
+    public WorkArrangement WorkArrangement { get; private set; }
+
+    public string? PersonalNotes { get; private set; }
+
     public Guid? CategoryId { get; private set; }
 
     public JobApplicationStatus Status { get; private set; }
@@ -66,7 +92,13 @@ public sealed class JobApplication
         string title,
         string company,
         string description,
-        string? location)
+        string? location,
+        string? recruiterName = null,
+        string? recruiterEmail = null,
+        string? recruiterLinkedInUrl = null,
+        string? salaryRange = null,
+        WorkArrangement workArrangement = WorkArrangement.Unspecified,
+        string? personalNotes = null)
     {
         if (userId == Guid.Empty)
         {
@@ -79,7 +111,69 @@ public sealed class JobApplication
             Required(title, nameof(title)),
             Required(company, nameof(company)),
             Required(description, nameof(description)),
-            string.IsNullOrWhiteSpace(location) ? null : location.Trim());
+            location,
+            recruiterName,
+            recruiterEmail,
+            recruiterLinkedInUrl,
+            salaryRange,
+            workArrangement,
+            personalNotes);
+    }
+
+    public void UpdateDetails(
+        string? location,
+        string? recruiterName,
+        string? recruiterEmail,
+        string? recruiterLinkedInUrl,
+        string? salaryRange,
+        WorkArrangement workArrangement,
+        string? personalNotes) =>
+        UpdateDetails(
+            location,
+            recruiterName,
+            recruiterEmail,
+            recruiterLinkedInUrl,
+            salaryRange,
+            workArrangement,
+            personalNotes,
+            touchUpdatedAt: true);
+
+    public void UpdateDescription(string description)
+    {
+        Description = Required(description, nameof(description));
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private void UpdateDetails(
+        string? location,
+        string? recruiterName,
+        string? recruiterEmail,
+        string? recruiterLinkedInUrl,
+        string? salaryRange,
+        WorkArrangement workArrangement,
+        string? personalNotes,
+        bool touchUpdatedAt)
+    {
+        if (!Enum.IsDefined(workArrangement))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(workArrangement),
+                workArrangement,
+                "Unsupported work arrangement.");
+        }
+
+        Location = Optional(location);
+        RecruiterName = Optional(recruiterName);
+        RecruiterEmail = Optional(recruiterEmail);
+        RecruiterLinkedInUrl = Optional(recruiterLinkedInUrl);
+        SalaryRange = Optional(salaryRange);
+        WorkArrangement = workArrangement;
+        PersonalNotes = Optional(personalNotes);
+
+        if (touchUpdatedAt)
+        {
+            UpdatedAt = DateTimeOffset.UtcNow;
+        }
     }
 
     public void ChangeStatus(JobApplicationStatus status)
@@ -127,4 +221,7 @@ public sealed class JobApplication
 
         return value.Trim();
     }
+
+    private static string? Optional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

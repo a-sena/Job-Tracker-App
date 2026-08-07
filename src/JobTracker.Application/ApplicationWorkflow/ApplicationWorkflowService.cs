@@ -50,7 +50,17 @@ internal sealed class ApplicationWorkflowService(
         var draft = await draftRepository.GetByLoggedJobApplicationIdAsync(
             jobApplicationId,
             cancellationToken);
-        return draft is null || draft.UserId != currentUser.UserId ? null : ToDto(draft);
+        if (draft is null || draft.UserId != currentUser.UserId)
+        {
+            return null;
+        }
+
+        var masterCv = draft.MasterCvId.HasValue
+            ? await masterCvRepository.GetByIdAsync(
+                draft.MasterCvId.Value,
+                cancellationToken: cancellationToken)
+            : null;
+        return ToDto(draft, masterCv?.Name);
     }
 
     public async Task<ApplicationDraftDto> GetOrCreateDraftAsync(
@@ -359,6 +369,34 @@ internal sealed class ApplicationWorkflowService(
             : new DraftPdfDto(
                 draft.InterviewQuestionsPdf.ToArray(),
                 draft.InterviewQuestionsPdfFileName);
+    }
+
+    public async Task<ApplicationDraftDto> SaveInterviewAnswersAsync(
+        Guid draftId,
+        SaveInterviewAnswersRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var draft = await draftRepository.GetByIdAsync(
+            draftId,
+            asTracking: true,
+            cancellationToken)
+            ?? throw new ApplicationWorkflowException(
+                "The application draft was not found.",
+                404);
+        EnsureDraftOwnership(draft);
+
+        try
+        {
+            draft.SaveInterviewAnswers(request.Answers);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            throw new ApplicationWorkflowException(exception.Message, 409, exception);
+        }
+
+        await draftRepository.SaveChangesAsync(cancellationToken);
+        return ToDto(draft);
     }
 
     public async Task<JobApplicationDto> LogAsync(
@@ -770,7 +808,9 @@ internal sealed class ApplicationWorkflowService(
         }
     }
 
-    private static ApplicationDraftDto ToDto(ApplicationDraft draft) =>
+    private static ApplicationDraftDto ToDto(
+        ApplicationDraft draft,
+        string? masterCvName = null) =>
         new(
             draft.Id,
             draft.UserId,
@@ -792,9 +832,11 @@ internal sealed class ApplicationWorkflowService(
             DeserializeCoverLetter(draft.CoverLetterContent),
             draft.CoverLetterPdfFileName,
             draft.InterviewQuestions,
+            draft.InterviewAnswers,
             draft.InterviewQuestionsPdfFileName,
             draft.CreatedAt,
-            draft.UpdatedAt);
+            draft.UpdatedAt,
+            masterCvName);
 
     private static CvReviewDetailsDto? DeserializeReviewDetails(string? content)
     {

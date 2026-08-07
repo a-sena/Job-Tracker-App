@@ -41,6 +41,7 @@ public sealed class ApplicationDraft
     public byte[]? CoverLetterPdf { get; private set; }
     public string? CoverLetterPdfFileName { get; private set; }
     public string[] InterviewQuestions { get; private set; } = [];
+    public string[] InterviewAnswers { get; private set; } = [];
     public byte[]? InterviewQuestionsPdf { get; private set; }
     public string? InterviewQuestionsPdfFileName { get; private set; }
     public Guid? LoggedJobApplicationId { get; private set; }
@@ -112,6 +113,7 @@ public sealed class ApplicationDraft
         TailoredPdf = null;
         TailoredPdfFileName = null;
         InterviewQuestions = [];
+        InterviewAnswers = [];
         InterviewQuestionsPdf = null;
         InterviewQuestionsPdfFileName = null;
         Touch();
@@ -146,6 +148,7 @@ public sealed class ApplicationDraft
         CoverLetterPdf = null;
         CoverLetterPdfFileName = null;
         InterviewQuestions = [];
+        InterviewAnswers = [];
         InterviewQuestionsPdf = null;
         InterviewQuestionsPdfFileName = null;
         Touch();
@@ -188,8 +191,42 @@ public sealed class ApplicationDraft
         }
 
         InterviewQuestions = normalizedQuestions;
+        InterviewAnswers = new string[normalizedQuestions.Length];
         InterviewQuestionsPdf = pdf.ToArray();
         InterviewQuestionsPdfFileName = Required(fileName, nameof(fileName), 255);
+        Touch();
+    }
+
+    public void SaveInterviewAnswers(IReadOnlyList<string> answers)
+    {
+        ArgumentNullException.ThrowIfNull(answers);
+        if (InterviewQuestions.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Generate interview questions before saving answers.");
+        }
+
+        if (answers.Count != InterviewQuestions.Length)
+        {
+            throw new ArgumentException(
+                "Provide exactly one answer slot for each interview question.",
+                nameof(answers));
+        }
+
+        InterviewAnswers = answers
+            .Select((answer, index) =>
+            {
+                var normalized = answer?.Trim() ?? string.Empty;
+                if (normalized.Length > 5_000)
+                {
+                    throw new ArgumentException(
+                        $"Answer {index + 1} cannot exceed 5,000 characters.",
+                        nameof(answers));
+                }
+
+                return normalized;
+            })
+            .ToArray();
         Touch();
     }
 
@@ -224,6 +261,7 @@ public sealed class ApplicationDraft
         CoverLetterPdf = null;
         CoverLetterPdfFileName = null;
         InterviewQuestions = [];
+        InterviewAnswers = [];
         InterviewQuestionsPdf = null;
         InterviewQuestionsPdfFileName = null;
     }

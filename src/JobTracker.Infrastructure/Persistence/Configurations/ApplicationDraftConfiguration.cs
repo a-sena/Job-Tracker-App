@@ -60,6 +60,8 @@ internal sealed class ApplicationDraftConfiguration
             .HasColumnName("cover_letter_pdf_file_name").HasMaxLength(255);
         builder.Property(draft => draft.InterviewQuestions)
             .HasColumnName("interview_questions").HasColumnType("jsonb").IsRequired();
+        builder.Property(draft => draft.InterviewAnswers)
+            .HasColumnName("interview_answers").HasColumnType("jsonb").IsRequired();
         builder.Property(draft => draft.InterviewQuestionsPdf)
             .HasColumnName("interview_questions_pdf").HasColumnType("bytea");
         builder.Property(draft => draft.InterviewQuestionsPdfFileName)

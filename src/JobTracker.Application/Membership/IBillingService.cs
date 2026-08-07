@@ -20,6 +20,9 @@ public interface IBillingService
     Task<BillingRedirectDto> CreateCustomerPortalSessionAsync(
         CancellationToken cancellationToken = default);
 
+    Task CancelSubscriptionAtPeriodEndAsync(
+        CancellationToken cancellationToken = default);
+
     Task ProcessWebhookAsync(
         string payload,
         string signature,

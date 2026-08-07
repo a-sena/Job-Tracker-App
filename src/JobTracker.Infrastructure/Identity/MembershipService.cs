@@ -46,14 +46,15 @@ internal sealed class MembershipService(
 
         if (planId == MembershipPlanCatalog.FreePlanId)
         {
-            var used = GetFreeUsage(user, feature);
-            if (used >= MembershipPlanCatalog.FreeFeatureLimit)
+            var totalUsed = GetTotalFreeUsage(user);
+            if (totalUsed >= MembershipPlanCatalog.FreeLifetimeAiActionLimit)
             {
                 throw new MembershipLimitException(
-                    $"Your free {FeatureLabel(feature)} has already been used. " +
+                    "Your four free AI actions have been used. " +
                     "Open Membership from your profile to view the Founding Member plan.");
             }
 
+            var used = GetFreeUsage(user, feature);
             SetFreeUsage(user, feature, used + 1);
         }
         else
@@ -156,12 +157,20 @@ internal sealed class MembershipService(
 
         return
         [
-            new("cv-review", "CV match review", user.FreeCvReviewsUsed, 1, "Lifetime"),
-            new("cv-tailoring", "AI-tailored CV", user.FreeCvTailorsUsed, 1, "Lifetime"),
-            new("interview-questions", "Interview preparation", user.FreeInterviewSetsUsed, 1, "Lifetime"),
-            new("cover-letter", "Cover letter", user.FreeCoverLettersUsed, 1, "Lifetime")
+            new(
+                "free-ai-actions",
+                "Free AI actions",
+                GetTotalFreeUsage(user),
+                MembershipPlanCatalog.FreeLifetimeAiActionLimit,
+                "Lifetime")
         ];
     }
+
+    private static int GetTotalFreeUsage(AppUser user) =>
+        user.FreeCvReviewsUsed +
+        user.FreeCvTailorsUsed +
+        user.FreeInterviewSetsUsed +
+        user.FreeCoverLettersUsed;
 
     private static int GetFreeUsage(AppUser user, AiFeature feature) => feature switch
     {
@@ -193,12 +202,4 @@ internal sealed class MembershipService(
         }
     }
 
-    private static string FeatureLabel(AiFeature feature) => feature switch
-    {
-        AiFeature.CvReview => "CV match review",
-        AiFeature.CvTailoring => "AI-tailored CV",
-        AiFeature.InterviewQuestions => "interview preparation set",
-        AiFeature.CoverLetter => "cover letter",
-        _ => "AI action"
-    };
 }

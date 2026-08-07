@@ -62,6 +62,9 @@ export default function MembershipDialog({
   const [error, setError] = useState<string | null>(null);
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
   const [isRedirecting, setIsRedirecting] = useState<"checkout" | "portal" | null>(null);
+  const [isConfirmingCancellation, setIsConfirmingCancellation] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancellationNotice, setCancellationNotice] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -143,6 +146,36 @@ export default function MembershipDialog({
     }
   }
 
+  async function cancelMembership(): Promise<void> {
+    setError(null);
+    setCancellationNotice(null);
+    setIsCancelling(true);
+    try {
+      const response = await apiFetch(apiBaseUrl, "/api/billing/cancel", {
+        method: "POST",
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(await readError(response));
+
+      setDashboard((current) => current ? { ...current, status: "Canceling" } : current);
+      setIsConfirmingCancellation(false);
+      setCancellationNotice(
+        dashboard?.renewsAt
+          ? `Your membership will end on ${new Intl.DateTimeFormat("en", { dateStyle: "long" }).format(new Date(dashboard.renewsAt))}. You can continue using paid features until then.`
+          : "Your membership will end after the current billing period. You can continue using paid features until then.",
+      );
+      setReloadToken((value) => value + 1);
+    } catch (cancelError) {
+      setError(
+        cancelError instanceof Error
+          ? cancelError.message
+          : "The membership cancellation could not be scheduled.",
+      );
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-[70] overflow-y-auto bg-[#172033]/60 px-4 py-6 backdrop-blur-sm sm:py-10"
@@ -199,6 +232,11 @@ export default function MembershipDialog({
               Billing changes are synchronized from Stripe and may take a few seconds to appear.
             </div>
           ) : null}
+          {cancellationNotice ? (
+            <div className="mb-5 rounded-xl border-2 border-[#b68119] bg-[#fff4cb] px-4 py-3 text-sm font-bold leading-6 text-[#79520b]">
+              {cancellationNotice}
+            </div>
+          ) : null}
           {error ? (
             <div role="alert" className="rounded-xl border-2 border-[#a54538] bg-[#ffe1dc] px-4 py-3 text-sm font-bold text-[#7f3026]">
               {error}
@@ -220,10 +258,16 @@ export default function MembershipDialog({
                     <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#687083]">Current plan</p>
                     <div className="mt-1 flex items-center gap-2">
                       <p className="text-2xl font-black tracking-[-0.03em]">{dashboard.planName}</p>
-                      <span className="rounded-full bg-[#dcf5e5] px-2 py-1 text-[10px] font-black uppercase text-[#28633e]">
-                        {dashboard.status}
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${dashboard.status.toLowerCase() === "canceling" ? "bg-[#fff0c2] text-[#8a5a12]" : "bg-[#dcf5e5] text-[#28633e]"}`}>
+                        {dashboard.status.toLowerCase() === "canceling" ? "Cancels at period end" : dashboard.status}
                       </span>
                     </div>
+                    {dashboard.renewsAt ? (
+                      <p className="mt-1 text-xs font-semibold text-[#687083]">
+                        {dashboard.status.toLowerCase() === "canceling" ? "Access available until" : "Next renewal"}{" "}
+                        {new Intl.DateTimeFormat("en", { dateStyle: "long" }).format(new Date(dashboard.renewsAt))}
+                      </p>
+                    ) : null}
                   </div>
                   <p className="max-w-sm text-xs font-semibold leading-5 text-[#687083]">
                     Only completed AI generations use an allowance. Application tracking remains unlimited.
@@ -251,14 +295,55 @@ export default function MembershipDialog({
                   })}
                 </div>
                 {dashboard.canManageBilling ? (
-                  <button
-                    type="button"
-                    disabled={isRedirecting !== null}
-                    onClick={() => void openBilling("/api/billing/portal")}
-                    className="mt-5 rounded-xl border-2 border-[#172033] bg-white px-4 py-2.5 text-xs font-black shadow-[2px_2px_0_#172033] transition hover:translate-x-px hover:translate-y-px hover:shadow-none disabled:cursor-wait disabled:opacity-60"
-                  >
-                    {isRedirecting === "portal" ? "Opening Stripe…" : "Manage billing in Stripe"}
-                  </button>
+                  <>
+                    <div className="mt-5 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={isRedirecting !== null || isCancelling}
+                        onClick={() => void openBilling("/api/billing/portal")}
+                        className="rounded-xl border-2 border-[#172033] bg-white px-4 py-2.5 text-xs font-black shadow-[2px_2px_0_#172033] transition hover:translate-x-px hover:translate-y-px hover:shadow-none disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {isRedirecting === "portal" ? "Opening Stripe…" : "Manage billing in Stripe"}
+                      </button>
+                      {dashboard.status.toLowerCase() !== "canceling" ? (
+                        <button
+                          type="button"
+                          disabled={isRedirecting !== null || isCancelling}
+                          onClick={() => setIsConfirmingCancellation(true)}
+                          className="px-2 py-2.5 text-xs font-extrabold text-[#a54538] underline decoration-[#d9a29a] underline-offset-4 transition hover:text-[#7f3026] disabled:cursor-wait disabled:opacity-60"
+                        >
+                          Cancel membership
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {isConfirmingCancellation && dashboard.status.toLowerCase() !== "canceling" ? (
+                      <div className="mt-4 rounded-xl border border-[#e2b3aa] bg-[#fff5f2] p-4">
+                        <p className="text-sm font-black text-[#7f3026]">Cancel your membership?</p>
+                        <p className="mt-1 text-xs font-semibold leading-5 text-[#765d59]">
+                          Renewal will stop, but your paid AI allowance and features will remain available until the end of the current billing period.
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={isCancelling}
+                            onClick={() => setIsConfirmingCancellation(false)}
+                            className="rounded-lg border border-[#b9b6ae] bg-white px-3 py-2 text-xs font-black text-[#4f5666] transition hover:border-[#172033] disabled:opacity-60"
+                          >
+                            Keep membership
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isCancelling}
+                            onClick={() => void cancelMembership()}
+                            className="rounded-lg bg-[#b94b3c] px-3 py-2 text-xs font-black text-white transition hover:bg-[#9d3c30] disabled:cursor-wait disabled:opacity-60"
+                          >
+                            {isCancelling ? "Scheduling cancellation…" : "Confirm cancellation"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
 

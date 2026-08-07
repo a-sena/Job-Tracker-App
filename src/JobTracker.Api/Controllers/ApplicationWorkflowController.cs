@@ -153,6 +153,16 @@ public sealed class ApplicationWorkflowController(
         CancellationToken cancellationToken) =>
         ExecuteAsync(() => workflowService.GenerateInterviewQuestionsAsync(id, cancellationToken));
 
+    [HttpPut("draft/{id:guid}/interview-answers")]
+    public Task<ActionResult<ApplicationDraftDto>> SaveInterviewAnswers(
+        Guid id,
+        [FromBody] SaveInterviewAnswersRequest request,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(() => workflowService.SaveInterviewAnswersAsync(
+            id,
+            request,
+            cancellationToken));
+
     [HttpGet("draft/{id:guid}/interview-questions/pdf")]
     [Produces("application/pdf")]
     public async Task<IActionResult> GetInterviewQuestionsPdf(
